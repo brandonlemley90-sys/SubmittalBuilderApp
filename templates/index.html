@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Denier Submittal Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Montserrat', sans-serif; }
+        .terminal-scrollbar::-webkit-scrollbar { width: 8px; }
+        .terminal-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+        .terminal-scrollbar::-webkit-scrollbar-thumb { background: #008751; border-radius: 10px; }
+        .terminal-scrollbar::-webkit-scrollbar-thumb:hover { background: #006e42; }
+        .cursor-blink { animation: blink 1s step-end infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="bg-zinc-900 text-gray-200 antialiased min-h-screen flex items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]">
+
+    <div id="pinModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl p-8 w-full max-w-sm shadow-2xl">
+            <h3 class="text-xl font-black text-white uppercase tracking-tight text-center mb-2">Secure Your Vault</h3>
+            <p class="text-sm text-gray-400 text-center mb-6">Enter a 4-digit PIN to save your API key.</p>
+            <input type="password" id="modalPinInput" maxlength="4" pattern="\d*" inputmode="numeric" class="w-full bg-zinc-900 border border-zinc-600 rounded-xl px-4 py-4 text-center text-3xl font-black text-white tracking-[1em] focus:outline-none focus:ring-2 focus:ring-[#008751] mb-6" placeholder="****">
+            <div class="flex gap-3">
+                <button type="button" onclick="closePinModal()" class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white font-bold py-3 rounded-lg uppercase text-xs transition-all">Cancel</button>
+                <button type="button" onclick="confirmVaultSave()" class="flex-1 bg-[#008751] hover:bg-[#006e42] text-white font-black py-3 rounded-lg uppercase text-xs shadow-lg border border-[#00a865] transition-all">Save Key</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="accountModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div class="bg-zinc-900 px-8 py-5 border-b border-zinc-700 flex justify-between items-center">
+                <h3 class="text-xl font-black text-white uppercase tracking-tight">Account Settings</h3>
+                <button onclick="closeAccountModal()" class="text-zinc-500 hover:text-white transition-colors">✕</button>
+            </div>
+
+            <div class="flex border-b border-zinc-700 bg-zinc-800/50 px-8">
+                <button id="tabBtn-profile" onclick="switchAccountTab('profile')" class="py-3 px-4 border-b-2 border-[#008751] text-[#008751] font-bold text-sm uppercase tracking-wide transition-all">Profile</button>
+                <button id="tabBtn-security" onclick="switchAccountTab('security')" class="py-3 px-4 border-b-2 border-transparent text-gray-400 hover:text-white font-bold text-sm uppercase tracking-wide transition-all">Security</button>
+            </div>
+
+            <div id="tabContent-profile" class="p-8 space-y-5">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Full Name</label>
+                    <input type="text" id="profile_name" value="{{ user_name }}" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-[#008751] outline-none" placeholder="Your Name">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Email Address</label>
+                    <input type="text" value="{{ user_email }}" disabled class="w-full bg-zinc-900/50 border border-zinc-700 rounded-lg px-4 py-3 text-gray-500 cursor-not-allowed">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Account Role</label>
+                    <div class="flex items-center justify-between">
+                        <div class="inline-block px-3 py-1 rounded bg-[#008751]/20 border border-[#008751]/50 text-[#008751] text-xs font-bold uppercase tracking-widest">
+                            {% if is_admin %}Administrator{% else %}Standard User{% endif %}
+                        </div>
+                        {% if not is_admin %}
+                        <button type="button" onclick="claimAdmin()" class="text-[10px] text-zinc-500 hover:text-[#008751] uppercase font-bold transition-colors tracking-widest">Claim Admin</button>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="pt-4 border-t border-zinc-700">
+                    <button type="button" onclick="submitProfileUpdate()" class="w-full bg-[#008751] hover:bg-[#006e42] text-white font-black py-3 rounded-lg uppercase text-xs tracking-widest shadow-lg border border-[#00a865] transition-all">Save Profile</button>
+                </div>
+            </div>
+
+            <div id="tabContent-security" class="hidden p-8 space-y-5">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Current Password</label>
+                    <input type="password" id="old_pw" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-[#008751] outline-none" placeholder="••••••••">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">New Password</label>
+                    <input type="password" id="new_pw" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-[#008751] outline-none" placeholder="••••••••">
+                </div>
+                <div class="pt-4 border-t border-zinc-700">
+                    <button type="button" onclick="submitPasswordChange()" class="w-full bg-zinc-700 hover:bg-zinc-600 text-white font-black py-3 rounded-lg uppercase text-xs tracking-widest shadow-lg border border-zinc-500 transition-all">Update Password</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="adminModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-zinc-800 border-2 border-red-800 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+            <h3 class="text-xl font-black text-white uppercase tracking-tight text-center mb-2">Admin Control Panel</h3>
+            <p class="text-xs text-red-400 text-center mb-6 font-bold uppercase tracking-widest italic">Authorized Access Only</p>
+            <div class="space-y-4">
+                <div class="bg-zinc-900/50 p-4 rounded-lg border border-zinc-700">
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-widest">Reset User Password</label>
+                    <input type="email" id="admin_target_email" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white mb-2" placeholder="User Email">
+                    <input type="text" id="admin_new_pw" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white mb-3" placeholder="New Temp Password">
+                    <button type="button" onclick="adminResetPassword()" class="w-full bg-red-900/40 hover:bg-red-800 text-white text-[10px] font-black uppercase py-2 rounded-lg border border-red-700 transition-all">Execute Reset</button>
+                </div>
+            </div>
+            <button type="button" onclick="document.getElementById('adminModal').classList.add('hidden')" class="mt-6 w-full text-gray-500 hover:text-white text-[10px] font-bold uppercase">Close</button>
+        </div>
+    </div>
+
+    <div id="consoleModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+        <div class="bg-zinc-900 border-2 border-[#008751] rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col h-[85vh]">
+            <div class="bg-[#008751] px-6 py-4 flex items-center justify-between shadow-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                    <h3 class="text-xs font-black text-white uppercase tracking-[0.2em]">Build Agent: Live Stream</h3>
+                </div>
+                <button type="button" onclick="stopConsole()" class="text-white/60 hover:text-white text-[10px] font-bold uppercase border border-white/20 px-3 py-1 rounded transition-all">Terminate View</button>
+            </div>
+            <div id="terminalOutput" class="flex-1 p-6 font-mono text-sm overflow-y-auto text-green-400 space-y-1 bg-black/80 terminal-scrollbar">
+                <div class="text-white/30 italic">Connecting to background process...</div>
+            </div>
+            <div class="p-6 bg-zinc-800 border-t border-zinc-700 flex gap-3 shadow-2xl">
+                <div class="flex-1 relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[#008751] font-bold">»</span>
+                    <input type="text" id="webTerminalInput" class="w-full bg-zinc-900 border border-zinc-700 rounded-xl pl-10 pr-4 py-4 text-white focus:ring-2 focus:ring-[#008751] outline-none placeholder-gray-600 transition-all" placeholder="Type answer to Agent here...">
+                </div>
+                <button type="button" onclick="sendTerminalAnswer()" class="bg-[#008751] hover:bg-[#006e42] text-white font-black px-10 rounded-xl uppercase text-xs tracking-widest transition-all">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="successModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl p-8 w-full max-w-sm shadow-2xl text-center">
+            <div class="w-16 h-16 bg-[#008751]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#008751]"><span class="text-2xl">✅</span></div>
+            <h3 class="text-xl font-black text-white uppercase tracking-tight mb-2">Done!</h3>
+            <p id="successText" class="text-sm text-gray-400 mb-6">Action completed successfully.</p>
+            <button type="button" id="successCloseBtn" onclick="closeSuccessModal()" class="w-full bg-[#008751] hover:bg-[#006e42] text-white font-black py-3 rounded-lg uppercase text-xs tracking-widest border border-[#00a865]">Got it (Enter)</button>
+        </div>
+    </div>
+
+    <div class="max-w-4xl w-full bg-zinc-800 rounded-xl shadow-2xl overflow-hidden border border-zinc-700">
+
+        <div class="bg-[#008751] px-8 py-6 border-b border-zinc-700 flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="pr-6 border-r-2 border-white/30"><img src="/static/Denier logo.png" class="h-14 w-auto object-contain"></div>
+                <div class="pl-6">
+                    <h2 class="text-xl font-bold text-white tracking-tight">Submittal Builder <span class="text-green-200">Agent</span></h2>
+                    <p class="text-xs text-green-100 font-medium uppercase tracking-wide mt-1">Industrial Intelligence Platform</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                {% if is_admin %}
+                <button type="button" onclick="document.getElementById('adminModal').classList.remove('hidden')" class="text-[10px] font-black uppercase text-red-200 border border-red-900/50 px-3 py-2 rounded-lg hover:bg-red-900/20 transition-all">Admin Panel</button>
+                {% endif %}
+
+                <button type="button" onclick="openAccountModal()" class="text-[10px] font-black uppercase text-white/70 hover:text-white border border-white/30 px-3 py-2 rounded-lg hover:bg-white/10 transition-all flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" /></svg>
+                    {% if user_name %}{{ user_name }}{% else %}Account{% endif %}
+                    {% if is_admin %}<span class="bg-green-400 text-green-900 px-1.5 py-0.5 rounded text-[8px] tracking-widest ml-1">ADMIN</span>{% endif %}
+                </button>
+
+                <a href="/logout" class="text-[10px] font-black uppercase text-white/70 hover:text-white border border-white/30 px-3 py-2 rounded-lg hover:bg-white/10 transition-all">Logout</a>
+            </div>
+        </div>
+
+        <form id="pipelineForm" class="p-8 space-y-8">
+            <div class="bg-zinc-900/50 p-6 rounded-xl border border-zinc-700 shadow-inner">
+                <label class="block text-sm font-bold text-gray-300 mb-3 uppercase tracking-wide">Gemini API Key Vault</label>
+                <div class="flex flex-col md:flex-row gap-3">
+                    <input type="password" id="api_key" required class="flex-1 bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-[#008751] transition-all" placeholder="Enter API Key or Unlock -->">
+                    <div class="flex gap-2">
+                        <input type="text" id="pin_entry" maxlength="4" class="w-20 bg-zinc-800 border border-zinc-600 rounded-lg px-2 text-center text-white font-bold focus:ring-2 focus:ring-[#008751] outline-none" placeholder="PIN">
+                        <button type="button" onclick="unlockVault()" class="bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] font-black uppercase px-4 rounded-lg border border-zinc-600 transition-all shadow-md">Unlock</button>
+                    </div>
+                </div>
+                <div class="mt-3 flex justify-end">
+                    <button type="button" onclick="openPinModal()" class="text-[10px] uppercase font-bold text-gray-500 hover:text-[#008751] transition-colors">⚙️ Save current key & PIN to account</button>
+                </div>
+            </div>
+
+            <hr class="border-zinc-700">
+
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-bold text-gray-300 mb-1 uppercase tracking-wide">Main Project Folder</label>
+                    <div class="flex space-x-3">
+                        <input type="text" id="folder" required class="flex-1 bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#008751] shadow-inner" placeholder="C:\Projects\Job-Name">
+                        <button type="button" onclick="browseFolder()" class="bg-zinc-700 hover:bg-zinc-600 text-white font-bold px-6 rounded-lg uppercase text-sm tracking-widest border border-zinc-600 transition-all">Browse</button>
+                        <button type="button" onclick="clearInput('folder')" class="text-zinc-500 hover:text-red-400 hover:bg-red-900/20 px-4 rounded-lg transition-all border border-transparent hover:border-red-900/50 flex items-center justify-center shadow-md" title="Clear Folder">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div id="drop-excel" class="border-2 border-dashed border-zinc-600 rounded-xl p-5 transition-all bg-zinc-800/50">
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">Excel Workbook</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="excel" required class="flex-1 bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-[#008751]" placeholder="Index.xlsx">
+                            <button type="button" onclick="browseFile('excel')" class="bg-zinc-700 hover:bg-zinc-600 px-3 rounded text-[10px] font-bold uppercase transition-all">Browse</button>
+                            <button type="button" onclick="clearInput('excel')" class="text-zinc-500 hover:text-red-400 hover:bg-red-900/20 px-2 rounded transition-all border border-transparent hover:border-red-900/50 flex items-center justify-center" title="Remove File">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="drop-form" class="border-2 border-dashed border-zinc-600 rounded-xl p-5 transition-all bg-zinc-800/50">
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">Job Setup Form PDF</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="form" required class="flex-1 bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-[#008751]" placeholder="Setup.pdf">
+                            <button type="button" onclick="browseFile('form')" class="bg-zinc-700 hover:bg-zinc-600 px-3 rounded text-[10px] font-bold uppercase transition-all">Browse</button>
+                            <button type="button" onclick="clearInput('form')" class="text-zinc-500 hover:text-red-400 hover:bg-red-900/20 px-2 rounded transition-all border border-transparent hover:border-red-900/50 flex items-center justify-center" title="Remove File">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="drop-specs" class="border-2 border-dashed border-zinc-600 rounded-xl p-5 transition-all bg-zinc-800/50">
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">Specifications PDF</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="specs" required class="flex-1 bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-[#008751]" placeholder="Specs.pdf">
+                            <button type="button" onclick="browseFile('specs')" class="bg-zinc-700 hover:bg-zinc-600 px-3 rounded text-[10px] font-bold uppercase transition-all">Browse</button>
+                            <button type="button" onclick="clearInput('specs')" class="text-zinc-500 hover:text-red-400 hover:bg-red-900/20 px-2 rounded transition-all border border-transparent hover:border-red-900/50 flex items-center justify-center" title="Remove File">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="drop-drawings" class="border-2 border-dashed border-zinc-600 rounded-xl p-5 transition-all bg-zinc-800/50">
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">Drawings PDF</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="drawings" required class="flex-1 bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-[#008751]" placeholder="Drawings.pdf">
+                            <button type="button" onclick="browseFile('drawings')" class="bg-zinc-700 hover:bg-zinc-600 px-3 rounded text-[10px] font-bold uppercase transition-all">Browse</button>
+                            <button type="button" onclick="clearInput('drawings')" class="text-zinc-500 hover:text-red-400 hover:bg-red-900/20 px-2 rounded transition-all border border-transparent hover:border-red-900/50 flex items-center justify-center" title="Remove File">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="drop-contract" class="md:col-span-2 border-2 border-dashed border-zinc-600 rounded-xl p-5 transition-all bg-zinc-800/50">
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">Contract PDF</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="contract" required class="flex-1 bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-[#008751]" placeholder="Contract.pdf">
+                            <button type="button" onclick="browseFile('contract')" class="bg-zinc-700 hover:bg-zinc-600 px-3 rounded text-[10px] font-bold uppercase transition-all">Browse</button>
+                            <button type="button" onclick="clearInput('contract')" class="text-zinc-500 hover:text-red-400 hover:bg-red-900/20 px-2 rounded transition-all border border-transparent hover:border-red-900/50 flex items-center justify-center" title="Remove File">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-8 flex items-center justify-between">
+                <span id="statusMessage" class="text-sm font-bold text-[#008751] hidden bg-[#008751]/10 px-4 py-2 rounded-lg border border-[#008751]/30 animate-pulse uppercase tracking-widest">✅ Pipeline Running...</span>
+                <button type="submit" class="ml-auto bg-[#008751] hover:bg-[#006e42] text-white font-black uppercase tracking-[0.2em] py-4 px-12 rounded-xl shadow-lg border border-[#00a865] transition-all transform active:scale-95">Start Building</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        let logInterval;
+
+        // --- KEYBOARD INTERACTION LOGIC ---
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const successModal = document.getElementById('successModal');
+                if (!successModal.classList.contains('hidden')) {
+                    e.preventDefault();
+                    closeSuccessModal();
+                }
+            }
+        });
+
+        document.getElementById('pin_entry').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); unlockVault(); }
+        });
+
+        document.getElementById('modalPinInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); confirmVaultSave(); }
+        });
+
+        document.getElementById('webTerminalInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); sendTerminalAnswer(); }
+        });
+
+        // --- ADMIN CLAIM BACKDOOR ---
+        async function claimAdmin() {
+            // Because the Python script looks for MASTER_ADMIN_KEY
+            const key = prompt("Enter the Master Admin Key to claim this role:");
+            if(!key) return;
+            const res = await fetch('/admin/promote_self', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ secret_key: key })
+            });
+            const data = await res.json();
+            if(data.status === 'success') {
+                alert("Success! You are now an Administrator.");
+                window.location.reload();
+            } else {
+                alert("Invalid Key.");
+            }
+        }
+
+        // --- AUTH & VAULT LOGIC ---
+        async function unlockVault() {
+            const pin = document.getElementById('pin_entry').value;
+            const res = await fetch('/unlock_api_vault', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ pin })});
+            const data = await res.json();
+            if(data.status === 'success') {
+                document.getElementById('api_key').value = data.api_key;
+                document.getElementById('pin_entry').value = '';
+                document.getElementById('api_key').classList.add('ring-2', 'ring-[#008751]');
+                setTimeout(() => document.getElementById('api_key').classList.remove('ring-2', 'ring-[#008751]'), 1000);
+            } else {
+                document.getElementById('pin_entry').classList.add('border-red-500');
+                setTimeout(() => document.getElementById('pin_entry').classList.remove('border-red-500'), 2000);
+            }
+        }
+
+        function openPinModal() {
+            const key = document.getElementById('api_key').value;
+            if(!key) {
+                document.getElementById('api_key').classList.add('border-red-500');
+                setTimeout(() => document.getElementById('api_key').classList.remove('border-red-500'), 2000);
+                return;
+            }
+            document.getElementById('pinModal').classList.remove('hidden');
+            document.getElementById('modalPinInput').value = '';
+            document.getElementById('modalPinInput').focus();
+        }
+        function closePinModal() { document.getElementById('pinModal').classList.add('hidden'); }
+
+        async function confirmVaultSave() {
+            const key = document.getElementById('api_key').value;
+            const pin = document.getElementById('modalPinInput').value;
+            if(!pin || pin.length < 4) {
+                document.getElementById('modalPinInput').classList.add('border-red-500');
+                setTimeout(() => document.getElementById('modalPinInput').classList.remove('border-red-500'), 2000);
+                return;
+            }
+            await fetch('/save_api_vault', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ api_key: key, pin })});
+            closePinModal();
+            showSuccess("Vault updated and securely stored.");
+        }
+
+        // --- ACCOUNT MANAGEMENT ---
+        function openAccountModal() { document.getElementById('accountModal').classList.remove('hidden'); }
+        function closeAccountModal() { document.getElementById('accountModal').classList.add('hidden'); }
+
+        function switchAccountTab(tab) {
+            document.getElementById('tabBtn-profile').classList.remove('border-[#008751]', 'text-[#008751]');
+            document.getElementById('tabBtn-profile').classList.add('border-transparent', 'text-gray-400');
+            document.getElementById('tabBtn-security').classList.remove('border-[#008751]', 'text-[#008751]');
+            document.getElementById('tabBtn-security').classList.add('border-transparent', 'text-gray-400');
+
+            document.getElementById('tabBtn-' + tab).classList.remove('border-transparent', 'text-gray-400');
+            document.getElementById('tabBtn-' + tab).classList.add('border-[#008751]', 'text-[#008751]');
+
+            document.getElementById('tabContent-profile').classList.add('hidden');
+            document.getElementById('tabContent-security').classList.add('hidden');
+            document.getElementById('tabContent-' + tab).classList.remove('hidden');
+        }
+
+        async function submitProfileUpdate() {
+            const name = document.getElementById('profile_name').value;
+            await fetch('/update_profile', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: name })});
+            closeAccountModal();
+            showSuccess("Profile updated successfully.");
+            setTimeout(() => window.location.reload(), 1500);
+        }
+
+        async function submitPasswordChange() {
+            const old_pw = document.getElementById('old_pw').value;
+            const new_pw = document.getElementById('new_pw').value;
+            const res = await fetch('/change_password', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ old_password: old_pw, new_password: new_pw })});
+            if((await res.json()).status === 'success') { closePasswordModal(); showSuccess("Password updated successfully."); }
+            else { alert("Current password incorrect."); }
+        }
+
+        // --- ADMIN TOOLS ---
+        async function adminResetPassword() {
+            const email = document.getElementById('admin_target_email').value;
+            const new_pw = document.getElementById('admin_new_pw').value;
+            const res = await fetch('/admin/reset_user_password', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email, new_password: new_pw })});
+            if((await res.json()).status === 'success') { document.getElementById('adminModal').classList.add('hidden'); showSuccess("User password has been overwritten."); }
+        }
+
+        // --- LIVE CONSOLE & TERMINAL LOGIC ---
+        function openConsole() {
+            document.getElementById('consoleModal').classList.remove('hidden');
+            document.getElementById('terminalOutput').innerHTML = '<div class="text-[#008751] font-black underline uppercase tracking-widest mb-4">>>> INITIALIZING AI AGENT SESSION</div>';
+            document.getElementById('webTerminalInput').focus();
+            logInterval = setInterval(fetchLogs, 500);
+        }
+
+        function stopConsole() {
+            clearInterval(logInterval);
+            document.getElementById('consoleModal').classList.add('hidden');
+        }
+
+        async function fetchLogs() {
+            const res = await fetch('/get_logs');
+            const data = await res.json();
+            const output = document.getElementById('terminalOutput');
+
+            data.logs.forEach(line => {
+                const div = document.createElement('div');
+                div.className = "border-l-2 border-[#008751]/20 pl-3";
+                div.textContent = line;
+                output.appendChild(div);
+            });
+
+            if(data.logs.length > 0) output.scrollTop = output.scrollHeight;
+
+            if(!data.active && data.logs.length === 0 && document.getElementById('terminalOutput').children.length > 1) {
+                if(!output.innerHTML.includes("SESSION ENDED")) {
+                    const endMsg = document.createElement('div');
+                    endMsg.className = "text-white font-black py-8 uppercase tracking-[0.4em] text-center opacity-50";
+                    endMsg.textContent = "--- AGENT SESSION ENDED ---";
+                    output.appendChild(endMsg);
+                    clearInterval(logInterval);
+                }
+            }
+        }
+
+        async function sendTerminalAnswer() {
+            const input = document.getElementById('webTerminalInput');
+            const text = input.value;
+            if(!text) return;
+
+            await fetch('/send_input', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ text })});
+
+            const output = document.getElementById('terminalOutput');
+            const div = document.createElement('div');
+            div.className = "text-white font-bold bg-[#008751]/10 px-3 py-2 rounded-lg mt-2 mb-2 border border-[#008751]/30";
+            div.textContent = `USER INPUT: ${text}`;
+            output.appendChild(div);
+
+            input.value = '';
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // --- UTILS & FORM SUBMISSION ---
+        function showSuccess(msg) {
+            document.getElementById('successText').innerText = msg;
+            document.getElementById('successModal').classList.remove('hidden');
+            document.getElementById('successCloseBtn').focus();
+        }
+
+        function closeSuccessModal() {
+            document.getElementById('successModal').classList.add('hidden');
+        }
+
+        function clearInput(id) {
+            document.getElementById(id).value = '';
+        }
+
+        async function browseFolder() {
+            const res = await fetch('/browse_folder');
+            const data = await res.json();
+            if(data.path) document.getElementById('folder').value = data.path;
+        }
+
+        async function browseFile(inputId) {
+            const res = await fetch(`/browse_file`);
+            const data = await res.json();
+            if(data.filename) document.getElementById(inputId).value = data.filename;
+        }
+
+        const dropzones = [
+            { zoneId: 'drop-excel', inputId: 'excel' },
+            { zoneId: 'drop-form', inputId: 'form' },
+            { zoneId: 'drop-specs', inputId: 'specs' },
+            { zoneId: 'drop-drawings', inputId: 'drawings' },
+            { zoneId: 'drop-contract', inputId: 'contract' }
+        ];
+
+        dropzones.forEach(({zoneId, inputId}) => {
+            const zone = document.getElementById(zoneId);
+            const input = document.getElementById(inputId);
+
+            zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('border-[#008751]', 'bg-[#008751]/10'); });
+            zone.addEventListener('dragleave', (e) => { e.preventDefault(); zone.classList.remove('border-[#008751]', 'bg-[#008751]/10'); });
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('border-[#008751]', 'bg-[#008751]/10');
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) input.value = e.dataTransfer.files[0].name;
+            });
+        });
+
+        // FORM LAUNCH
+        document.getElementById('pipelineForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                api_key: document.getElementById('api_key').value,
+                folder: document.getElementById('folder').value,
+                excel: document.getElementById('excel').value,
+                form: document.getElementById('form').value,
+                specs: document.getElementById('specs').value,
+                drawings: document.getElementById('drawings').value,
+                contract: document.getElementById('contract').value
+            };
+            const response = await fetch('/launch', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+            const result = await response.json();
+            if(result.status === 'success') {
+                openConsole();
+            } else {
+                alert(result.message);
+            }
+        });
+    </script>
+</body>
+</html>
