@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login | Denier Submittal Builder Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+</head>
+<body class="bg-zinc-900 flex items-center justify-center min-h-screen font-['Montserrat']">
+    <div class="max-w-md w-full bg-zinc-800 p-10 rounded-2xl shadow-2xl border border-zinc-700">
+        <div class="text-center mb-8">
+            <img src="/static/Denier logo.png" alt="Denier Logo" class="h-24 w-auto mx-auto mb-6 drop-shadow-lg">
+            <h1 class="text-white text-xl font-black uppercase tracking-tight">Submittal Builder Login</h1>
+        </div>
+
+        {% if error %}
+        <div class="mb-4 bg-red-900/40 border border-red-600 text-red-300 text-sm font-bold px-4 py-3 rounded-lg text-center uppercase tracking-wide">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form action="{{ url_for('login') }}" method="POST" class="space-y-4">
+            <input type="email" name="email" placeholder="Company Email" required
+                   class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-[#008751] outline-none">
+            <input type="password" name="password" placeholder="Password" required
+                   class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-[#008751] outline-none">
+            <button type="submit"
+                    class="w-full bg-[#008751] text-white font-bold py-3 rounded-lg hover:bg-[#006e42] transition-all uppercase tracking-widest">
+                Login
+            </button>
+        </form>
+
+        <p class="text-center text-zinc-400 text-sm mt-6">
+            Don't have an account?
+            <a href="{{ url_for('register') }}" class="text-[#008751] font-bold hover:underline transition-all">
+                Register here
+            </a>
+        </p>
+    </div>
+</body>
+</html>
