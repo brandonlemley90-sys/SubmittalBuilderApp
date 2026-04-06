@@ -13,6 +13,14 @@ import tkinter as tk
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# Import auto-updater
+try:
+    from auto_updater import AutoUpdater, get_current_version
+    AUTO_UPDATER_AVAILABLE = True
+except ImportError:
+    AUTO_UPDATER_AVAILABLE = False
+    print("Warning: Auto-updater module not found. Updates will not be available.")
+
 # --- 1. DATABASE & GLOBALS ---
 if os.name == 'nt':
     app_data_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'DenierAI')
@@ -78,6 +86,11 @@ app = Flask(__name__, template_folder=resource_path('templates'), static_folder=
 app.secret_key = "denier_vault_production_2026"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 MASTER_ADMIN_KEY = "Denier_Admin_2026_Global"
+
+# Initialize auto-updater
+auto_updater = None
+if AUTO_UPDATER_AVAILABLE:
+    auto_updater = AutoUpdater()
 
 
 # --- 3. PROCESS HANDLING ---
@@ -239,7 +252,45 @@ def browse_file():
     return jsonify({"filename": os.path.basename(f) if f else ""})
 
 
-# --- 7. LAUNCH ---
+# --- 8. AUTO-UPDATER ENDPOINTS ---
+@app.route('/check_updates')
+def check_updates():
+    """Check for available updates"""
+    if not AUTO_UPDATER_AVAILABLE or not auto_updater:
+        return jsonify({"available": False, "error": "Auto-updater not available"})
+    
+    result = check_for_updates()
+    return jsonify(result)
+
+
+@app.route('/get_version')
+def get_app_version():
+    """Get current application version"""
+    if AUTO_UPDATER_AVAILABLE:
+        version = get_current_version()
+    else:
+        version = "unknown"
+    return jsonify({"version": version})
+
+
+@app.route('/download_update', methods=['POST'])
+def download_update():
+    """Download and install update"""
+    if not AUTO_UPDATER_AVAILABLE or not auto_updater:
+        return jsonify({"status": "error", "message": "Auto-updater not available"}), 503
+    
+    def progress_callback(msg, percent):
+        # In a real implementation, you'd use WebSocket or polling
+        print(f"Update progress: {msg} - {percent}%")
+    
+    try:
+        success = auto_updater.download_and_install(progress_callback)
+        return jsonify({"status": "success" if success else "error"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# --- 9. LAUNCH ---
 @app.route('/launch', methods=['POST'])
 def launch():
     global active_process
