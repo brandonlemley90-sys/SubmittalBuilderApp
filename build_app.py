@@ -92,9 +92,9 @@ def create_version_file():
     print("📝 Creating version file...")
     
     version_info = {
-        "version": VERSION,
-        "release_notes": f"Version {VERSION} - Initial Release",
-        "build_date": "2024"
+        "version": VERSION = "1.0.1"  # Increment version
+        "release_notes": f"Version {VERSION} - Bug fixes and updated reset password functionality for admin users",
+        "build_date": "2026"
     }
     
     # Create version.json for the app to read
