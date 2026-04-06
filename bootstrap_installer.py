@@ -1,3 +1,24 @@
+import os
+import sys
+import time
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
+# ==========================================
+# CONFIGURATION 
+# ==========================================
+UPDATE_SERVER_URL = "https://github.com/brandonlemley90-sys/DenierSubmittalBuilderAgentUpdates.gits"
+
+# Directory where the app will be installed
+INSTALL_DIR = Path(os.environ.get('LOCALAPPDATA')) / "DenierAI_Submittal_Builder"
+APP_NAME = "DenierAI Submittal Builder"
+
+def run_application():
+    """Launch the installed application"""
+    print("\n🚀 Starting application...")
+# ... the rest of your code continues here ...
 def run_application():
     """Launch the installed application"""
     print("\n🚀 Starting application...")
