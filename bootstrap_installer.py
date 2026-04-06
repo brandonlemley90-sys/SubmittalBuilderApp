@@ -9,7 +9,7 @@ from pathlib import Path
 # ==========================================
 # CONFIGURATION 
 # ==========================================
-UPDATE_SERVER_URL = "https://github.com/brandonlemley90-sys/DenierSubmittalBuilderAgentUpdates.gits"
+UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates"
 
 # Directory where the app will be installed
 INSTALL_DIR = Path(os.environ.get('LOCALAPPDATA')) / "DenierAI_Submittal_Builder"
