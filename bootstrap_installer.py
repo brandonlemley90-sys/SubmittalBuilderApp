@@ -14,10 +14,15 @@ from pathlib import Path
 from urllib.request import urlopen, urlretrieve
 from urllib.error import URLError
 
-# Configuration - Update this with your server URL
-UPDATE_SERVER_URL = "https://your-server.com/updates"
+# ---------------------------------------------------------
+# CONFIGURATION - Pointing to your GitHub Pages Repo
+# ---------------------------------------------------------
+UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates"
 APP_NAME = "DenierAI_Submittal_Builder"
-INSTALL_DIR = Path(os.environ.get('PROGRAMFILES', 'C:\\Program Files')) / APP_NAME
+
+# CRITICAL FIX: Use LOCALAPPDATA so the auto-updater has permission to overwrite files later
+INSTALL_DIR = Path(os.environ.get('LOCALAPPDATA')) / APP_NAME
+# ---------------------------------------------------------
 
 def get_bootstrap_version():
     """Return the bootstrap version"""
@@ -109,7 +114,7 @@ def install_app(progress_callback=None):
         print("\n❌ Download failed!")
         return False
     
-    print("\n✅ Download complete!")
+    print("\n✅ Download complete!          ") # Extra spaces to clear progress line
     
     # Verify file integrity
     print("\n🔒 Verifying file integrity...")
@@ -132,7 +137,7 @@ def install_app(progress_callback=None):
         
         print("✅ Extraction complete!")
         
-        # Create version file
+        # Create version file locally so the auto-updater knows what version it is
         version_file = INSTALL_DIR / "version.json"
         with open(version_file, 'w') as f:
             json.dump({
@@ -152,10 +157,11 @@ def create_shortcut():
     print("\n🔗 Creating desktop shortcut...")
     
     try:
-        # Find the executable
+        # Assuming your compiled app in the zip is named main.exe, you might want to hardcode this 
+        # instead of searching for the first .exe it finds. But this works for now.
         exe_files = list(INSTALL_DIR.glob("*.exe"))
         if not exe_files:
-            print("⚠️  No executable found, skipping shortcut creation")
+            print("⚠️  No executable found in the downloaded package, skipping shortcut creation")
             return False
         
         exe_path = exe_files[0]
@@ -185,11 +191,6 @@ def create_shortcut():
     except Exception as e:
         print(f"⚠️  Shortcut creation failed: {e}")
         return False
-
-def add_to_path():
-    """Optionally add to system PATH"""
-    # This is optional - the app can run from its installation directory
-    pass
 
 def run_application():
     """Launch the installed application"""
@@ -258,6 +259,9 @@ def main():
             print("✅ Old installation removed")
         except Exception as e:
             print(f"⚠️  Could not remove old installation: {e}")
+            print("   Make sure the application is closed before reinstalling.")
+            input("\nPress Enter to exit...")
+            return False
     
     # Install the application
     print("\n" + "=" * 70)
@@ -278,7 +282,6 @@ def main():
     print("\n  The application will now start.")
     print(f"  In the future, you can launch it from:")
     print(f"    - Desktop shortcut")
-    print(f"    - Start Menu")
     print(f"    - Directly from: {INSTALL_DIR}")
     print("\n  The app will automatically check for updates when launched!")
     print("=" * 70)
@@ -303,4 +306,5 @@ if __name__ == "__main__":
         print(f"\n❌ Unexpected error: {e}")
         import traceback
         traceback.print_exc()
+        input("\nPress Enter to exit...")
         sys.exit(1)
