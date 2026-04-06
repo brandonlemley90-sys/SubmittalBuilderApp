@@ -5,6 +5,10 @@ import subprocess
 import webbrowser
 import threading
 import queue
+import json
+import hmac
+import hashlib
+import time
 from datetime import timedelta
 from threading import Timer
 from tkinter import filedialog
@@ -35,29 +39,22 @@ def init_db():
         cursor.execute('''
                        CREATE TABLE IF NOT EXISTS users
                        (
-                           email
-                           TEXT
-                           PRIMARY
-                           KEY,
-                           password
-                           TEXT,
-                           api_key
-                           TEXT,
-                           pin
-                           TEXT
+                           email    TEXT PRIMARY KEY,
+                           password TEXT,
+                           api_key  TEXT,
+                           pin      TEXT
                        )
                        ''')
 
         # MIGRATIONS: Add new columns if they don't exist
-        try:
-            cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            cursor.execute("ALTER TABLE users ADD COLUMN name TEXT DEFAULT ''")
-        except sqlite3.OperationalError:
-            pass
+        for migration in [
+            "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN name TEXT DEFAULT ''",
+        ]:
+            try:
+                cursor.execute(migration)
+            except sqlite3.OperationalError:
+                pass
 
         conn.commit()
 
@@ -78,20 +75,31 @@ app = Flask(__name__, template_folder=resource_path('templates'), static_folder=
 app.secret_key = "denier_vault_production_2026"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
-# UPDATED MASTER ADMIN KEY
 MASTER_ADMIN_KEY = "DenierSubmittalsLemley90"
 
 
-# --- 3. PROCESS HANDLING ---
+# --- 3. HELPERS ---
+def _sign_payload(payload_str: str) -> str:
+    """Returns an HMAC-SHA256 hex digest of the payload string."""
+    return hmac.new(
+        MASTER_ADMIN_KEY.encode(),
+        payload_str.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+
+# --- 4. PROCESS HANDLING ---
 def enqueue_output(out, q):
-    for line in iter(out.readline, ''): q.put(line)
+    for line in iter(out.readline, ''):
+        q.put(line)
     out.close()
 
 
 @app.route('/get_logs')
 def get_logs():
     logs = []
-    while not output_queue.empty(): logs.append(output_queue.get())
+    while not output_queue.empty():
+        logs.append(output_queue.get())
     return jsonify({"logs": logs, "active": active_process is not None and active_process.poll() is None})
 
 
@@ -107,12 +115,12 @@ def send_input():
     return jsonify({"status": "error", "message": "No active process"}), 400
 
 
-# --- 4. NAVIGATION & AUTH ---
+# --- 5. NAVIGATION & AUTH ---
 @app.route('/')
 def home():
-    if not session.get('logged_in'): return redirect(url_for('login'))
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
 
-    # Fetch user details to display in the Account modal
     with sqlite3.connect(DB_PATH) as conn:
         user = conn.execute("SELECT name FROM users WHERE email = ?", (session['user_email'],)).fetchone()
         user_name = user[0] if user and user[0] else ""
@@ -158,10 +166,11 @@ def logout():
     return redirect(url_for('login'))
 
 
-# --- 5. ACCOUNT & ADMIN TOOLS ---
+# --- 6. ACCOUNT & ADMIN TOOLS ---
 @app.route('/update_profile', methods=['POST'])
 def update_profile():
-    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    if not session.get('logged_in'):
+        return jsonify({"status": "error"}), 401
     name = request.json.get('name', '')
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("UPDATE users SET name = ? WHERE email = ?", (name, session['user_email']))
@@ -182,7 +191,8 @@ def change_password():
 
 @app.route('/admin/promote_self', methods=['POST'])
 def promote_self():
-    if not session.get('logged_in'): return "Unauthorized", 401
+    if not session.get('logged_in'):
+        return "Unauthorized", 401
     data = request.json
     if data.get('secret_key') == MASTER_ADMIN_KEY:
         with sqlite3.connect(DB_PATH) as conn:
@@ -192,17 +202,96 @@ def promote_self():
     return "Forbidden", 403
 
 
-@app.route('/admin/reset_user_password', methods=['POST'])
-def admin_reset_password():
-    if not session.get('is_admin'): return "Admin access required", 403
+# --- 7. PASSWORD RESET TOKEN SYSTEM ---
+@app.route('/admin/generate_reset_token', methods=['POST'])
+def generate_reset_token():
+    """
+    Admin generates a signed .denierreset file to send to the user.
+    The file is downloaded client-side and delivered manually (email, Teams, etc.).
+    The user imports it into their own local app to update their local DB.
+    """
+    if not session.get('is_admin'):
+        return jsonify({"status": "error", "message": "Admin access required."}), 403
+
     data = request.json
-    hashed_pw = generate_password_hash(data.get('new_password'))
+    target_email = data.get('email', '').strip()
+    new_password = data.get('new_password', '').strip()
+
+    if not target_email or not new_password:
+        return jsonify({"status": "error", "message": "Email and new password are required."}), 400
+
+    hashed_pw = generate_password_hash(new_password)
+    expires_at = int(time.time()) + (72 * 3600)  # 72-hour expiry
+
+    payload = {
+        "email": target_email,
+        "hashed_password": hashed_pw,
+        "expires_at": expires_at
+    }
+
+    payload_str = json.dumps(payload, sort_keys=True)
+    signature = _sign_payload(payload_str)
+
+    token_data = {"payload": payload, "signature": signature}
+    safe_name = target_email.split('@')[0].replace('.', '_')
+
+    return jsonify({
+        "status": "success",
+        "token": token_data,
+        "filename": f"reset_{safe_name}.denierreset"
+    })
+
+
+@app.route('/apply_reset', methods=['POST'])
+def apply_reset():
+    """
+    User imports the .denierreset file generated by the admin.
+    Validates signature, expiry, and email match before updating the local DB.
+    """
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "You must be logged in to apply a reset."}), 401
+
+    data = request.json
+    token_data = data.get('token')
+
+    if not token_data or 'payload' not in token_data or 'signature' not in token_data:
+        return jsonify({"status": "error", "message": "Invalid or malformed reset file."}), 400
+
+    payload = token_data['payload']
+    received_signature = token_data['signature']
+
+    # 1. Verify HMAC signature — catches tampered/forged files
+    payload_str = json.dumps(payload, sort_keys=True)
+    expected_signature = _sign_payload(payload_str)
+
+    if not hmac.compare_digest(expected_signature, received_signature):
+        return jsonify({"status": "error", "message": "Reset file signature is invalid or has been tampered with."}), 403
+
+    # 2. Check expiry
+    if int(time.time()) > payload.get('expires_at', 0):
+        return jsonify({"status": "error", "message": "This reset file has expired. Ask your admin to generate a new one."}), 403
+
+    # 3. Confirm the reset file targets the currently logged-in user
+    if payload.get('email') != session.get('user_email'):
+        return jsonify({
+            "status": "error",
+            "message": f"This reset file is for a different account ({payload.get('email')}). Log in with that account first."
+        }), 403
+
+    # 4. Apply the new password to the local database
     with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("UPDATE users SET password = ? WHERE email = ?", (hashed_pw, data.get('email')))
-    return jsonify({"status": "success", "message": "User password reset."})
+        rows_updated = conn.execute(
+            "UPDATE users SET password = ? WHERE email = ?",
+            (payload['hashed_password'], session['user_email'])
+        ).rowcount
+
+    if rows_updated == 0:
+        return jsonify({"status": "error", "message": "User account not found in local database."}), 404
+
+    return jsonify({"status": "success", "message": "Password updated! Please log out and log back in with your new password."})
 
 
-# --- 6. VAULT & BROWSE ---
+# --- 8. VAULT & BROWSE ---
 @app.route('/save_api_vault', methods=['POST'])
 def save_api_vault():
     data = request.json
@@ -223,44 +312,55 @@ def unlock_api_vault():
 
 @app.route('/browse_folder')
 def browse_folder():
-    root = tk.Tk();
-    root.withdraw();
+    root = tk.Tk()
+    root.withdraw()
     root.attributes('-topmost', True)
-    f = filedialog.askdirectory();
+    f = filedialog.askdirectory()
     root.destroy()
     return jsonify({"path": os.path.normpath(f) if f else ""})
 
 
 @app.route('/browse_file')
 def browse_file():
-    root = tk.Tk();
-    root.withdraw();
+    root = tk.Tk()
+    root.withdraw()
     root.attributes('-topmost', True)
-    f = filedialog.askopenfilename();
+    f = filedialog.askopenfilename()
     root.destroy()
     return jsonify({"filename": os.path.basename(f) if f else ""})
 
 
-# --- 7. LAUNCH ---
+# --- 9. LAUNCH ---
 @app.route('/launch', methods=['POST'])
 def launch():
     global active_process
-    if active_process and active_process.poll() is None: return jsonify(
-        {"status": "error", "message": "Builder already running!"})
+    if active_process and active_process.poll() is None:
+        return jsonify({"status": "error", "message": "Builder already running!"})
+
     data = request.json
     meta_script = resource_path("SubmittalBuilderMetaAgent.py")
     env = os.environ.copy()
     env.update({
-        "GEMINI_API_KEY": data.get("api_key", ""), "PROJECT_FOLDER": data.get("folder", ""),
-        "EXCEL_WORKBOOK_NAME": data.get("excel", ""), "JOB_FORM_PDF_NAME": data.get("form", ""),
-        "SPEC_PDF_NAME": data.get("specs", ""), "DRAWINGS_PDF_NAME": data.get("drawings", ""),
-        "CONTRACT_PDF_NAME": data.get("contract", "")
+        "GEMINI_API_KEY":        data.get("api_key", ""),
+        "PROJECT_FOLDER":        data.get("folder", ""),
+        "EXCEL_WORKBOOK_NAME":   data.get("excel", ""),
+        "JOB_FORM_PDF_NAME":     data.get("form", ""),
+        "SPEC_PDF_NAME":         data.get("specs", ""),
+        "DRAWINGS_PDF_NAME":     data.get("drawings", ""),
+        "CONTRACT_PDF_NAME":     data.get("contract", "")
     })
-    active_process = subprocess.Popen([sys.executable, "-u", meta_script, "--web"], env=env, stdout=subprocess.PIPE,
-                                      stderr=subprocess.STDOUT, stdin=subprocess.PIPE, text=True, bufsize=1,
-                                      creationflags=0x08000000)
+    active_process = subprocess.Popen(
+        [sys.executable, "-u", meta_script, "--web"],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+        creationflags=0x08000000
+    )
     t = threading.Thread(target=enqueue_output, args=(active_process.stdout, output_queue))
-    t.daemon = True;
+    t.daemon = True
     t.start()
     return jsonify({"status": "success"})
 
