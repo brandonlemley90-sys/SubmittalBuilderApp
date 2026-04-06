@@ -1,0 +1,48 @@
+```
+# Build artifacts and distributions
+build/
+dist/
+*.exe
+*.zip
+
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Dependencies
+.venv/
+venv/
+env/
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+*.env.*
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# MyPy cache
+.mypy_cache/
+
+# Pytest cache
+.pytest_cache/
+```
