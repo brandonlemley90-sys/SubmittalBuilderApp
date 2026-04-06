@@ -18,6 +18,7 @@
 </head>
 <body class="bg-zinc-900 text-gray-200 antialiased min-h-screen flex items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]">
 
+    <!-- PIN MODAL -->
     <div id="pinModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
         <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl p-8 w-full max-w-sm shadow-2xl">
             <h3 class="text-xl font-black text-white uppercase tracking-tight text-center mb-2">Secure Your Vault</h3>
@@ -30,6 +31,7 @@
         </div>
     </div>
 
+    <!-- ACCOUNT MODAL -->
     <div id="accountModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
         <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
             <div class="bg-zinc-900 px-8 py-5 border-b border-zinc-700 flex justify-between items-center">
@@ -40,8 +42,10 @@
             <div class="flex border-b border-zinc-700 bg-zinc-800/50 px-8">
                 <button id="tabBtn-profile" onclick="switchAccountTab('profile')" class="py-3 px-4 border-b-2 border-[#008751] text-[#008751] font-bold text-sm uppercase tracking-wide transition-all">Profile</button>
                 <button id="tabBtn-security" onclick="switchAccountTab('security')" class="py-3 px-4 border-b-2 border-transparent text-gray-400 hover:text-white font-bold text-sm uppercase tracking-wide transition-all">Security</button>
+                <button id="tabBtn-reset" onclick="switchAccountTab('reset')" class="py-3 px-4 border-b-2 border-transparent text-gray-400 hover:text-white font-bold text-sm uppercase tracking-wide transition-all">Apply Reset</button>
             </div>
 
+            <!-- Profile Tab -->
             <div id="tabContent-profile" class="p-8 space-y-5">
                 <div>
                     <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Full Name</label>
@@ -67,6 +71,7 @@
                 </div>
             </div>
 
+            <!-- Security Tab -->
             <div id="tabContent-security" class="hidden p-8 space-y-5">
                 <div>
                     <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Current Password</label>
@@ -80,25 +85,49 @@
                     <button type="button" onclick="submitPasswordChange()" class="w-full bg-zinc-700 hover:bg-zinc-600 text-white font-black py-3 rounded-lg uppercase text-xs tracking-widest shadow-lg border border-zinc-500 transition-all">Update Password</button>
                 </div>
             </div>
+
+            <!-- Apply Reset Tab (visible to all users) -->
+            <div id="tabContent-reset" class="hidden p-8 space-y-5">
+                <div class="bg-zinc-900/60 rounded-lg border border-zinc-700 p-4">
+                    <p class="text-xs text-gray-400 leading-relaxed">If your admin sent you a <span class="text-[#008751] font-bold">.denierreset</span> file, upload it here to update your password. The file expires 72 hours after it was generated.</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Reset File</label>
+                    <input type="file" id="resetFileInput" accept=".denierreset" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white text-sm focus:ring-2 focus:ring-[#008751] outline-none file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-bold file:bg-[#008751] file:text-white hover:file:bg-[#006e42] file:cursor-pointer">
+                </div>
+                <p id="applyResetStatus" class="text-xs font-bold hidden"></p>
+                <div class="pt-4 border-t border-zinc-700">
+                    <button type="button" onclick="applyResetFile()" class="w-full bg-zinc-700 hover:bg-zinc-600 text-white font-black py-3 rounded-lg uppercase text-xs tracking-widest shadow-lg border border-zinc-500 transition-all">Apply Password Reset</button>
+                </div>
+            </div>
         </div>
     </div>
 
+    <!-- ADMIN MODAL -->
     <div id="adminModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
         <div class="bg-zinc-800 border-2 border-red-800 rounded-2xl p-8 w-full max-w-md shadow-2xl">
             <h3 class="text-xl font-black text-white uppercase tracking-tight text-center mb-2">Admin Control Panel</h3>
             <p class="text-xs text-red-400 text-center mb-6 font-bold uppercase tracking-widest italic">Authorized Access Only</p>
+
             <div class="space-y-4">
+                <!-- Generate Reset File Section -->
                 <div class="bg-zinc-900/50 p-4 rounded-lg border border-zinc-700">
-                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-widest">Reset User Password</label>
-                    <input type="email" id="admin_target_email" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white mb-2" placeholder="User Email">
-                    <input type="text" id="admin_new_pw" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white mb-3" placeholder="New Temp Password">
-                    <button type="button" onclick="adminResetPassword()" class="w-full bg-red-900/40 hover:bg-red-800 text-white text-[10px] font-black uppercase py-2 rounded-lg border border-red-700 transition-all">Execute Reset</button>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Generate Password Reset File</label>
+                    <p class="text-[10px] text-zinc-500 mb-3 leading-relaxed">Creates a signed <span class="text-red-300">.denierreset</span> file to send to the user. They import it from their Account → Apply Reset tab.</p>
+                    <input type="email" id="admin_target_email" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white mb-2 focus:ring-2 focus:ring-red-700 outline-none" placeholder="User Email">
+                    <input type="text" id="admin_new_pw" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white mb-3 focus:ring-2 focus:ring-red-700 outline-none" placeholder="Temporary Password">
+                    <button type="button" onclick="generateResetToken()" class="w-full bg-red-900/40 hover:bg-red-800 text-white text-[10px] font-black uppercase py-2 rounded-lg border border-red-700 transition-all">
+                        ⬇ Generate &amp; Download Reset File
+                    </button>
+                    <p id="resetTokenStatus" class="text-[10px] font-bold mt-2 hidden"></p>
                 </div>
             </div>
-            <button type="button" onclick="document.getElementById('adminModal').classList.add('hidden')" class="mt-6 w-full text-gray-500 hover:text-white text-[10px] font-bold uppercase">Close</button>
+
+            <button type="button" onclick="document.getElementById('adminModal').classList.add('hidden')" class="mt-6 w-full text-gray-500 hover:text-white text-[10px] font-bold uppercase transition-colors">Close</button>
         </div>
     </div>
 
+    <!-- CONSOLE MODAL -->
     <div id="consoleModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
         <div class="bg-zinc-900 border-2 border-[#008751] rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col h-[85vh]">
             <div class="bg-[#008751] px-6 py-4 flex items-center justify-between shadow-lg">
@@ -121,6 +150,7 @@
         </div>
     </div>
 
+    <!-- SUCCESS MODAL -->
     <div id="successModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
         <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl p-8 w-full max-w-sm shadow-2xl text-center">
             <div class="w-16 h-16 bg-[#008751]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#008751]"><span class="text-2xl">✅</span></div>
@@ -130,6 +160,7 @@
         </div>
     </div>
 
+    <!-- MAIN CARD -->
     <div class="max-w-4xl w-full bg-zinc-800 rounded-xl shadow-2xl overflow-hidden border border-zinc-700">
 
         <div class="bg-[#008751] px-8 py-6 border-b border-zinc-700 flex items-center justify-between">
@@ -271,18 +302,17 @@
             if (e.key === 'Enter') { e.preventDefault(); sendTerminalAnswer(); }
         });
 
-        // --- ADMIN CLAIM BACKDOOR ---
+        // --- ADMIN CLAIM ---
         async function claimAdmin() {
-            // Because the Python script looks for MASTER_ADMIN_KEY
             const key = prompt("Enter the Master Admin Key to claim this role:");
-            if(!key) return;
+            if (!key) return;
             const res = await fetch('/admin/promote_self', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ secret_key: key })
             });
             const data = await res.json();
-            if(data.status === 'success') {
+            if (data.status === 'success') {
                 alert("Success! You are now an Administrator.");
                 window.location.reload();
             } else {
@@ -290,12 +320,12 @@
             }
         }
 
-        // --- AUTH & VAULT LOGIC ---
+        // --- VAULT ---
         async function unlockVault() {
             const pin = document.getElementById('pin_entry').value;
-            const res = await fetch('/unlock_api_vault', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ pin })});
+            const res = await fetch('/unlock_api_vault', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin }) });
             const data = await res.json();
-            if(data.status === 'success') {
+            if (data.status === 'success') {
                 document.getElementById('api_key').value = data.api_key;
                 document.getElementById('pin_entry').value = '';
                 document.getElementById('api_key').classList.add('ring-2', 'ring-[#008751]');
@@ -308,7 +338,7 @@
 
         function openPinModal() {
             const key = document.getElementById('api_key').value;
-            if(!key) {
+            if (!key) {
                 document.getElementById('api_key').classList.add('border-red-500');
                 setTimeout(() => document.getElementById('api_key').classList.remove('border-red-500'), 2000);
                 return;
@@ -317,42 +347,40 @@
             document.getElementById('modalPinInput').value = '';
             document.getElementById('modalPinInput').focus();
         }
+
         function closePinModal() { document.getElementById('pinModal').classList.add('hidden'); }
 
         async function confirmVaultSave() {
             const key = document.getElementById('api_key').value;
             const pin = document.getElementById('modalPinInput').value;
-            if(!pin || pin.length < 4) {
+            if (!pin || pin.length < 4) {
                 document.getElementById('modalPinInput').classList.add('border-red-500');
                 setTimeout(() => document.getElementById('modalPinInput').classList.remove('border-red-500'), 2000);
                 return;
             }
-            await fetch('/save_api_vault', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ api_key: key, pin })});
+            await fetch('/save_api_vault', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_key: key, pin }) });
             closePinModal();
             showSuccess("Vault updated and securely stored.");
         }
 
-        // --- ACCOUNT MANAGEMENT ---
+        // --- ACCOUNT MODAL ---
         function openAccountModal() { document.getElementById('accountModal').classList.remove('hidden'); }
         function closeAccountModal() { document.getElementById('accountModal').classList.add('hidden'); }
 
         function switchAccountTab(tab) {
-            document.getElementById('tabBtn-profile').classList.remove('border-[#008751]', 'text-[#008751]');
-            document.getElementById('tabBtn-profile').classList.add('border-transparent', 'text-gray-400');
-            document.getElementById('tabBtn-security').classList.remove('border-[#008751]', 'text-[#008751]');
-            document.getElementById('tabBtn-security').classList.add('border-transparent', 'text-gray-400');
-
+            ['profile', 'security', 'reset'].forEach(t => {
+                document.getElementById('tabBtn-' + t).classList.remove('border-[#008751]', 'text-[#008751]');
+                document.getElementById('tabBtn-' + t).classList.add('border-transparent', 'text-gray-400');
+                document.getElementById('tabContent-' + t).classList.add('hidden');
+            });
             document.getElementById('tabBtn-' + tab).classList.remove('border-transparent', 'text-gray-400');
             document.getElementById('tabBtn-' + tab).classList.add('border-[#008751]', 'text-[#008751]');
-
-            document.getElementById('tabContent-profile').classList.add('hidden');
-            document.getElementById('tabContent-security').classList.add('hidden');
             document.getElementById('tabContent-' + tab).classList.remove('hidden');
         }
 
         async function submitProfileUpdate() {
             const name = document.getElementById('profile_name').value;
-            await fetch('/update_profile', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: name })});
+            await fetch('/update_profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
             closeAccountModal();
             showSuccess("Profile updated successfully.");
             setTimeout(() => window.location.reload(), 1500);
@@ -361,20 +389,112 @@
         async function submitPasswordChange() {
             const old_pw = document.getElementById('old_pw').value;
             const new_pw = document.getElementById('new_pw').value;
-            const res = await fetch('/change_password', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ old_password: old_pw, new_password: new_pw })});
-            if((await res.json()).status === 'success') { closePasswordModal(); showSuccess("Password updated successfully."); }
-            else { alert("Current password incorrect."); }
+            const res = await fetch('/change_password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ old_password: old_pw, new_password: new_pw }) });
+            const data = await res.json();
+            if (data.status === 'success') {
+                closeAccountModal();
+                showSuccess("Password updated successfully.");
+            } else {
+                alert("Current password incorrect.");
+            }
         }
 
-        // --- ADMIN TOOLS ---
-        async function adminResetPassword() {
-            const email = document.getElementById('admin_target_email').value;
-            const new_pw = document.getElementById('admin_new_pw').value;
-            const res = await fetch('/admin/reset_user_password', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email, new_password: new_pw })});
-            if((await res.json()).status === 'success') { document.getElementById('adminModal').classList.add('hidden'); showSuccess("User password has been overwritten."); }
+        // --- ADMIN: GENERATE RESET FILE ---
+        async function generateResetToken() {
+            const email   = document.getElementById('admin_target_email').value.trim();
+            const new_pw  = document.getElementById('admin_new_pw').value.trim();
+            const statusEl = document.getElementById('resetTokenStatus');
+
+            if (!email || !new_pw) {
+                statusEl.textContent = 'Both fields are required.';
+                statusEl.className = 'text-[10px] font-bold mt-2 text-red-400';
+                statusEl.classList.remove('hidden');
+                return;
+            }
+
+            statusEl.textContent = 'Generating...';
+            statusEl.className = 'text-[10px] font-bold mt-2 text-gray-400';
+            statusEl.classList.remove('hidden');
+
+            const res = await fetch('/admin/generate_reset_token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, new_password: new_pw })
+            });
+
+            const data = await res.json();
+
+            if (data.status === 'success') {
+                // Auto-download the .denierreset file
+                const blob = new Blob([JSON.stringify(data.token, null, 2)], { type: 'application/json' });
+                const url  = URL.createObjectURL(blob);
+                const a    = document.createElement('a');
+                a.href     = url;
+                a.download = data.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                statusEl.textContent = `✅ Downloaded: ${data.filename} — send this file to the user.`;
+                statusEl.className = 'text-[10px] font-bold mt-2 text-green-400';
+
+                // Clear fields
+                document.getElementById('admin_target_email').value = '';
+                document.getElementById('admin_new_pw').value = '';
+            } else {
+                statusEl.textContent = `❌ ${data.message || 'Error generating reset file.'}`;
+                statusEl.className = 'text-[10px] font-bold mt-2 text-red-400';
+            }
         }
 
-        // --- LIVE CONSOLE & TERMINAL LOGIC ---
+        // --- USER: APPLY RESET FILE ---
+        async function applyResetFile() {
+            const fileInput = document.getElementById('resetFileInput');
+            const statusEl  = document.getElementById('applyResetStatus');
+
+            if (!fileInput.files.length) {
+                statusEl.textContent = '⚠️ Please select a .denierreset file first.';
+                statusEl.className = 'text-xs font-bold text-yellow-400';
+                statusEl.classList.remove('hidden');
+                return;
+            }
+
+            let token;
+            try {
+                const text = await fileInput.files[0].text();
+                token = JSON.parse(text);
+            } catch {
+                statusEl.textContent = '❌ Invalid file format. Make sure you selected the correct .denierreset file.';
+                statusEl.className = 'text-xs font-bold text-red-400';
+                statusEl.classList.remove('hidden');
+                return;
+            }
+
+            statusEl.textContent = 'Applying reset...';
+            statusEl.className = 'text-xs font-bold text-gray-400';
+            statusEl.classList.remove('hidden');
+
+            const res  = await fetch('/apply_reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            });
+            const data = await res.json();
+
+            if (data.status === 'success') {
+                statusEl.textContent = '✅ ' + data.message;
+                statusEl.className = 'text-xs font-bold text-green-400';
+                fileInput.value = '';
+                // Auto-logout after 3 seconds so user is forced to re-login with new password
+                setTimeout(() => { window.location.href = '/logout'; }, 3000);
+            } else {
+                statusEl.textContent = '❌ ' + (data.message || 'Failed to apply reset.');
+                statusEl.className = 'text-xs font-bold text-red-400';
+            }
+        }
+
+        // --- CONSOLE ---
         function openConsole() {
             document.getElementById('consoleModal').classList.remove('hidden');
             document.getElementById('terminalOutput').innerHTML = '<div class="text-[#008751] font-black underline uppercase tracking-widest mb-4">>>> INITIALIZING AI AGENT SESSION</div>';
@@ -388,8 +508,8 @@
         }
 
         async function fetchLogs() {
-            const res = await fetch('/get_logs');
-            const data = await res.json();
+            const res    = await fetch('/get_logs');
+            const data   = await res.json();
             const output = document.getElementById('terminalOutput');
 
             data.logs.forEach(line => {
@@ -399,10 +519,10 @@
                 output.appendChild(div);
             });
 
-            if(data.logs.length > 0) output.scrollTop = output.scrollHeight;
+            if (data.logs.length > 0) output.scrollTop = output.scrollHeight;
 
-            if(!data.active && data.logs.length === 0 && document.getElementById('terminalOutput').children.length > 1) {
-                if(!output.innerHTML.includes("SESSION ENDED")) {
+            if (!data.active && data.logs.length === 0 && output.children.length > 1) {
+                if (!output.innerHTML.includes("SESSION ENDED")) {
                     const endMsg = document.createElement('div');
                     endMsg.className = "text-white font-black py-8 uppercase tracking-[0.4em] text-center opacity-50";
                     endMsg.textContent = "--- AGENT SESSION ENDED ---";
@@ -414,84 +534,79 @@
 
         async function sendTerminalAnswer() {
             const input = document.getElementById('webTerminalInput');
-            const text = input.value;
-            if(!text) return;
+            const text  = input.value;
+            if (!text) return;
 
-            await fetch('/send_input', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ text })});
+            await fetch('/send_input', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
 
             const output = document.getElementById('terminalOutput');
-            const div = document.createElement('div');
-            div.className = "text-white font-bold bg-[#008751]/10 px-3 py-2 rounded-lg mt-2 mb-2 border border-[#008751]/30";
+            const div    = document.createElement('div');
+            div.className   = "text-white font-bold bg-[#008751]/10 px-3 py-2 rounded-lg mt-2 mb-2 border border-[#008751]/30";
             div.textContent = `USER INPUT: ${text}`;
             output.appendChild(div);
-
             input.value = '';
             output.scrollTop = output.scrollHeight;
         }
 
-        // --- UTILS & FORM SUBMISSION ---
+        // --- UTILS ---
         function showSuccess(msg) {
             document.getElementById('successText').innerText = msg;
             document.getElementById('successModal').classList.remove('hidden');
             document.getElementById('successCloseBtn').focus();
         }
 
-        function closeSuccessModal() {
-            document.getElementById('successModal').classList.add('hidden');
-        }
-
-        function clearInput(id) {
-            document.getElementById(id).value = '';
-        }
+        function closeSuccessModal() { document.getElementById('successModal').classList.add('hidden'); }
+        function clearInput(id) { document.getElementById(id).value = ''; }
 
         async function browseFolder() {
             const res = await fetch('/browse_folder');
             const data = await res.json();
-            if(data.path) document.getElementById('folder').value = data.path;
+            if (data.path) document.getElementById('folder').value = data.path;
         }
 
         async function browseFile(inputId) {
-            const res = await fetch(`/browse_file`);
+            const res = await fetch('/browse_file');
             const data = await res.json();
-            if(data.filename) document.getElementById(inputId).value = data.filename;
+            if (data.filename) document.getElementById(inputId).value = data.filename;
         }
 
+        // --- DRAG & DROP ---
         const dropzones = [
-            { zoneId: 'drop-excel', inputId: 'excel' },
-            { zoneId: 'drop-form', inputId: 'form' },
-            { zoneId: 'drop-specs', inputId: 'specs' },
+            { zoneId: 'drop-excel',    inputId: 'excel'    },
+            { zoneId: 'drop-form',     inputId: 'form'     },
+            { zoneId: 'drop-specs',    inputId: 'specs'    },
             { zoneId: 'drop-drawings', inputId: 'drawings' },
             { zoneId: 'drop-contract', inputId: 'contract' }
         ];
 
-        dropzones.forEach(({zoneId, inputId}) => {
-            const zone = document.getElementById(zoneId);
+        dropzones.forEach(({ zoneId, inputId }) => {
+            const zone  = document.getElementById(zoneId);
             const input = document.getElementById(inputId);
-
-            zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('border-[#008751]', 'bg-[#008751]/10'); });
+            zone.addEventListener('dragover',  (e) => { e.preventDefault(); zone.classList.add('border-[#008751]', 'bg-[#008751]/10'); });
             zone.addEventListener('dragleave', (e) => { e.preventDefault(); zone.classList.remove('border-[#008751]', 'bg-[#008751]/10'); });
             zone.addEventListener('drop', (e) => {
                 e.preventDefault();
                 zone.classList.remove('border-[#008751]', 'bg-[#008751]/10');
-                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) input.value = e.dataTransfer.files[0].name;
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0)
+                    input.value = e.dataTransfer.files[0].name;
             });
         });
 
-        // FORM LAUNCH
+        // --- FORM LAUNCH ---
         document.getElementById('pipelineForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const payload = {
-                api_key: document.getElementById('api_key').value,
-                folder: document.getElementById('folder').value,
-                excel: document.getElementById('excel').value,
-                form: document.getElementById('form').value,
-                specs: document.getElementById('specs').value,
+                api_key:  document.getElementById('api_key').value,
+                folder:   document.getElementById('folder').value,
+                excel:    document.getElementById('excel').value,
+                form:     document.getElementById('form').value,
+                specs:    document.getElementById('specs').value,
                 drawings: document.getElementById('drawings').value,
                 contract: document.getElementById('contract').value
             };
-            const response = await fetch('/launch', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-            const result = await response.json();
-            if(result.status === 'success') {
+            const response = await fetch('/launch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const result   = await response.json();
+            if (result.status === 'success') {
                 openConsole();
             } else {
                 alert(result.message);
