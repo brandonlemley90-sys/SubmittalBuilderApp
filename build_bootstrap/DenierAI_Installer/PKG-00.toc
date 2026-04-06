@@ -147,13 +147,13 @@
   ('libcrypto-3.dll',
    'C:\\Users\\blemley\\AppData\\Local\\Programs\\Python\\Python314\\DLLs\\libcrypto-3.dll',
    'BINARY'),
-  ('certifi\\cacert.pem',
-   'C:\\Users\\blemley\\Desktop\\AI Agent Codes\\Submittal Builder '
-   'Agent\\.venv\\Lib\\site-packages\\certifi\\cacert.pem',
-   'DATA'),
   ('certifi\\py.typed',
    'C:\\Users\\blemley\\Desktop\\AI Agent Codes\\Submittal Builder '
    'Agent\\.venv\\Lib\\site-packages\\certifi\\py.typed',
+   'DATA'),
+  ('certifi\\cacert.pem',
+   'C:\\Users\\blemley\\Desktop\\AI Agent Codes\\Submittal Builder '
+   'Agent\\.venv\\Lib\\site-packages\\certifi\\cacert.pem',
    'DATA'),
   ('base_library.zip',
    'C:\\Users\\blemley\\Desktop\\AI Agent Codes\\Submittal Builder '
