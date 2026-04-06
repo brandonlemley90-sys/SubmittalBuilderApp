@@ -18,7 +18,6 @@
 </head>
 <body class="bg-zinc-900 text-gray-200 antialiased min-h-screen flex items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]">
 
-    <!-- PIN MODAL -->
     <div id="pinModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
         <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl p-8 w-full max-w-sm shadow-2xl">
             <h3 class="text-xl font-black text-white uppercase tracking-tight text-center mb-2">Secure Your Vault</h3>
@@ -31,7 +30,6 @@
         </div>
     </div>
 
-    <!-- ACCOUNT MODAL -->
     <div id="accountModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
         <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
             <div class="bg-zinc-900 px-8 py-5 border-b border-zinc-700 flex justify-between items-center">
@@ -45,7 +43,6 @@
                 <button id="tabBtn-reset" onclick="switchAccountTab('reset')" class="py-3 px-4 border-b-2 border-transparent text-gray-400 hover:text-white font-bold text-sm uppercase tracking-wide transition-all">Apply Reset</button>
             </div>
 
-            <!-- Profile Tab -->
             <div id="tabContent-profile" class="p-8 space-y-5">
                 <div>
                     <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Full Name</label>
@@ -71,7 +68,6 @@
                 </div>
             </div>
 
-            <!-- Security Tab -->
             <div id="tabContent-security" class="hidden p-8 space-y-5">
                 <div>
                     <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Current Password</label>
@@ -86,7 +82,6 @@
                 </div>
             </div>
 
-            <!-- Apply Reset Tab (visible to all users) -->
             <div id="tabContent-reset" class="hidden p-8 space-y-5">
                 <div class="bg-zinc-900/60 rounded-lg border border-zinc-700 p-4">
                     <p class="text-xs text-gray-400 leading-relaxed">If your admin sent you a <span class="text-[#008751] font-bold">.denierreset</span> file, upload it here to update your password. The file expires 72 hours after it was generated.</p>
@@ -103,21 +98,19 @@
         </div>
     </div>
 
-    <!-- ADMIN MODAL -->
     <div id="adminModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
         <div class="bg-zinc-800 border-2 border-red-800 rounded-2xl p-8 w-full max-w-md shadow-2xl">
             <h3 class="text-xl font-black text-white uppercase tracking-tight text-center mb-2">Admin Control Panel</h3>
             <p class="text-xs text-red-400 text-center mb-6 font-bold uppercase tracking-widest italic">Authorized Access Only</p>
 
             <div class="space-y-4">
-                <!-- Generate Reset File Section -->
                 <div class="bg-zinc-900/50 p-4 rounded-lg border border-zinc-700">
                     <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Generate Password Reset File</label>
-                    <p class="text-[10px] text-zinc-500 mb-3 leading-relaxed">Creates a signed <span class="text-red-300">.denierreset</span> file to send to the user. They import it from their Account → Apply Reset tab.</p>
+                    <p class="text-[10px] text-zinc-500 mb-3 leading-relaxed">Creates a signed <span class="text-red-300">.denierreset</span> file to send to the user.</p>
                     <input type="email" id="admin_target_email" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white mb-2 focus:ring-2 focus:ring-red-700 outline-none" placeholder="User Email">
                     <input type="text" id="admin_new_pw" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-white mb-3 focus:ring-2 focus:ring-red-700 outline-none" placeholder="Temporary Password">
                     <button type="button" onclick="generateResetToken()" class="w-full bg-red-900/40 hover:bg-red-800 text-white text-[10px] font-black uppercase py-2 rounded-lg border border-red-700 transition-all">
-                        ⬇ Generate &amp; Download Reset File
+                        ⬇ Generate &amp; Download
                     </button>
                     <p id="resetTokenStatus" class="text-[10px] font-bold mt-2 hidden"></p>
                 </div>
@@ -127,7 +120,6 @@
         </div>
     </div>
 
-    <!-- CONSOLE MODAL -->
     <div id="consoleModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
         <div class="bg-zinc-900 border-2 border-[#008751] rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col h-[85vh]">
             <div class="bg-[#008751] px-6 py-4 flex items-center justify-between shadow-lg">
@@ -150,7 +142,6 @@
         </div>
     </div>
 
-    <!-- SUCCESS MODAL -->
     <div id="successModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
         <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl p-8 w-full max-w-sm shadow-2xl text-center">
             <div class="w-16 h-16 bg-[#008751]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#008751]"><span class="text-2xl">✅</span></div>
@@ -160,8 +151,22 @@
         </div>
     </div>
 
-    <!-- MAIN CARD -->
     <div class="max-w-4xl w-full bg-zinc-800 rounded-xl shadow-2xl overflow-hidden border border-zinc-700">
+
+        <div id="updateBanner" class="hidden bg-blue-900/80 border-b border-blue-500/50 px-8 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center border border-blue-400">
+                    <span class="text-lg">🚀</span>
+                </div>
+                <div>
+                    <h4 class="text-white font-bold text-sm tracking-wide">Update Available: v<span id="updateVersion"></span></h4>
+                    <p id="updateNotes" class="text-blue-200 text-[10px] uppercase tracking-widest mt-0.5"></p>
+                </div>
+            </div>
+            <button onclick="startUpdate()" id="updateBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-black py-2 px-6 rounded-lg text-xs uppercase tracking-[0.1em] shadow-lg border border-blue-400 transition-all">
+                Download & Restart
+            </button>
+        </div>
 
         <div class="bg-[#008751] px-8 py-6 border-b border-zinc-700 flex items-center justify-between">
             <div class="flex items-center">
@@ -302,6 +307,53 @@
             if (e.key === 'Enter') { e.preventDefault(); sendTerminalAnswer(); }
         });
 
+        // --- AUTO-UPDATER LOGIC ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch('/check_update');
+                const data = await res.json();
+
+                if (data.available) {
+                    document.getElementById('updateVersion').innerText = data.version;
+                    document.getElementById('updateNotes').innerText = data.release_notes || 'New features and bug fixes.';
+                    document.getElementById('updateBanner').classList.remove('hidden');
+                }
+            } catch (e) {
+                console.error("Failed to check for updates", e);
+            }
+        });
+
+        async function startUpdate() {
+            const btn = document.getElementById('updateBtn');
+            btn.innerText = "Downloading... Please Wait";
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed', 'animate-pulse');
+
+            try {
+                const res = await fetch('/download_update', { method: 'POST' });
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    showSuccess(data.message);
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 8000);
+                } else {
+                    alert("Update failed: " + data.message);
+                    resetUpdateBtn(btn);
+                }
+            } catch (e) {
+                alert("Error triggering update. Check console.");
+                resetUpdateBtn(btn);
+            }
+        }
+
+        function resetUpdateBtn(btn) {
+            btn.innerText = "Download & Restart";
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed', 'animate-pulse');
+        }
+
         // --- ADMIN CLAIM ---
         async function claimAdmin() {
             const key = prompt("Enter the Master Admin Key to claim this role:");
@@ -425,7 +477,6 @@
             const data = await res.json();
 
             if (data.status === 'success') {
-                // Auto-download the .denierreset file
                 const blob = new Blob([JSON.stringify(data.token, null, 2)], { type: 'application/json' });
                 const url  = URL.createObjectURL(blob);
                 const a    = document.createElement('a');
@@ -439,7 +490,6 @@
                 statusEl.textContent = `✅ Downloaded: ${data.filename} — send this file to the user.`;
                 statusEl.className = 'text-[10px] font-bold mt-2 text-green-400';
 
-                // Clear fields
                 document.getElementById('admin_target_email').value = '';
                 document.getElementById('admin_new_pw').value = '';
             } else {
@@ -486,7 +536,6 @@
                 statusEl.textContent = '✅ ' + data.message;
                 statusEl.className = 'text-xs font-bold text-green-400';
                 fileInput.value = '';
-                // Auto-logout after 3 seconds so user is forced to re-login with new password
                 setTimeout(() => { window.location.href = '/logout'; }, 3000);
             } else {
                 statusEl.textContent = '❌ ' + (data.message || 'Failed to apply reset.');
