@@ -7,19 +7,22 @@ import sys
 import json
 import hashlib
 import shutil
-import subprocess
 import threading
 import time
+import re
+import subprocess
 from pathlib import Path
 from urllib.request import urlopen, urlretrieve
 from urllib.error import URLError
 
-# Configuration - Update these values in your release server
-UPDATE_SERVER_URL = "https://your-server.com/updates"  # Replace with your actual server
+# ---------------------------------------------------------
+# CONFIGURATION - Pointing to your GitHub Pages Repo
+# ---------------------------------------------------------
+UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates" 
 CURRENT_VERSION = "1.0.0"
 VERSION_FILE = "version.json"
 APP_NAME = "DenierAI_Submittal_Builder"
-
+# ---------------------------------------------------------
 
 def get_app_directory():
     """Get the application directory"""
@@ -27,7 +30,6 @@ def get_app_directory():
         return Path(sys.executable).parent
     else:
         return Path(__file__).parent.absolute()
-
 
 def get_current_version():
     """Read current version from version file"""
@@ -42,7 +44,6 @@ def get_current_version():
         except:
             pass
     return CURRENT_VERSION
-
 
 def check_for_updates():
     """Check if a new version is available"""
@@ -72,17 +73,14 @@ def check_for_updates():
         print(f"Update check failed: {e}")
         return {'available': False, 'error': str(e)}
 
-
 def version_compare(v1, v2):
     """Compare two version strings. Returns: 1 if v1>v2, -1 if v1<v2, 0 if equal"""
     def normalize(v):
         return [int(x) for x in re.sub(r'(\.0+)*$', '', v).split(".")]
     
-    import re
     parts1 = normalize(v1)
     parts2 = normalize(v2)
     
-    # Pad shorter version with zeros
     while len(parts1) < len(parts2):
         parts1.append(0)
     while len(parts2) < len(parts1):
@@ -94,7 +92,6 @@ def version_compare(v1, v2):
         elif parts1[i] < parts2[i]:
             return -1
     return 0
-
 
 def download_update(download_url, callback=None):
     """Download the update file"""
@@ -114,11 +111,10 @@ def download_update(download_url, callback=None):
         print(f"Download failed: {e}")
         raise
 
-
 def verify_file_hash(file_path, expected_hash):
     """Verify downloaded file integrity"""
     if not expected_hash:
-        return True
+        return True # Safely bypass if no hash is provided in version.json
     
     sha256_hash = hashlib.sha256()
     with open(file_path, "rb") as f:
@@ -127,91 +123,55 @@ def verify_file_hash(file_path, expected_hash):
     
     return sha256_hash.hexdigest() == expected_hash
 
-
 def install_update(update_package, callback=None):
-    """Install the update by extracting and replacing files"""
+    """Install the update using a batch script to avoid Windows file locks"""
     import zipfile
     
     app_dir = get_app_directory()
     temp_dir = app_dir / "temp_update"
-    backup_dir = app_dir / "backup_old"
     
     try:
-        # Create temp directory
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
         temp_dir.mkdir()
         
-        # Extract update package
         if callback:
             callback("Extracting update...", 50)
         
         with zipfile.ZipFile(update_package, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
-        
-        # Backup current version
+            
         if callback:
-            callback("Backing up current version...", 70)
+            callback("Preparing installation script...", 85)
+            
+        # Determine the name of the main executable
+        exe_name = Path(sys.executable).name if getattr(sys, 'frozen', False) else "main.py"
         
-        if backup_dir.exists():
-            shutil.rmtree(backup_dir)
-        
-        # Move current files to backup (except the updater itself)
-        files_to_move = [f for f in app_dir.iterdir() 
-                        if f.name not in ['temp_update', 'backup_old', 'update_package.zip']]
-        
-        for file in files_to_move:
-            if file.is_file() or file.is_dir():
-                shutil.move(str(file), str(backup_dir / file.name))
-        
-        # Move new files
-        if callback:
-            callback("Installing new version...", 85)
-        
-        for file in temp_dir.iterdir():
-            shutil.move(str(file), str(app_dir / file.name))
-        
-        # Clean up
-        shutil.rmtree(temp_dir)
-        
-        if callback:
-            callback("Update complete!", 100)
-        
-        return True
+        # Create a batch script to handle the overwrite after the app closes
+        bat_path = app_dir / "apply_update.bat"
+        bat_content = f"""@echo off
+echo Updating {APP_NAME}... Please wait.
+timeout /t 2 /nobreak > nul
+xcopy /y /s /e /q "{temp_dir}\\*" "{app_dir}\\"
+rmdir /s /q "{temp_dir}"
+del "{update_package}"
+start "" "{app_dir}\\{exe_name}"
+del "%~f0"
+"""
+        with open(bat_path, "w") as f:
+            f.write(bat_content)
+            
+        return bat_path
         
     except Exception as e:
-        print(f"Installation failed: {e}")
-        # Restore from backup if installation fails
-        if backup_dir.exists():
-            for file in backup_dir.iterdir():
-                shutil.move(str(file), str(app_dir / file.name))
+        print(f"Extraction failed: {e}")
         raise
 
-
-def restart_application():
-    """Restart the application after update"""
-    app_dir = get_app_directory()
-    exe_path = sys.executable if getattr(sys, 'frozen', False) else sys.argv[0]
-    
-    # Clean up backup after successful restart
-    backup_dir = app_dir / "backup_old"
-    if backup_dir.exists():
-        threading.Thread(target=lambda: (time.sleep(5), shutil.rmtree(backup_dir))).start()
-    
-    # Restart
-    os.execl(exe_path, exe_path, *sys.argv[1:])
-
-
-def auto_update_check(on_update_available=None, on_download_progress=None):
-    """Background thread to check and optionally download updates"""
-    update_info = check_for_updates()
-    
-    if update_info.get('available'):
-        if on_update_available:
-            on_update_available(update_info)
-    else:
-        print("Application is up to date.")
-
+def restart_application(bat_path):
+    """Launch the batch script and kill the current process"""
+    # Launch the bat file detached from the current process
+    subprocess.Popen([str(bat_path)], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
+    sys.exit(0) # Immediately kill the Python app so the bat file can overwrite it
 
 class AutoUpdater:
     """Main auto-updater class for integration with the app"""
@@ -238,30 +198,26 @@ class AutoUpdater:
         
         def _install():
             try:
-                # Download
                 update_file = download_update(
                     self.update_info['download_url'],
                     lambda pct: progress_callback("Downloading", pct) if progress_callback else None
                 )
                 
-                # Verify
                 if not verify_file_hash(update_file, self.update_info.get('file_hash')):
                     raise Exception("File hash verification failed")
                 
-                # Install
-                install_update(
+                # Returns the path to the batch script
+                bat_path = install_update(
                     update_file,
                     lambda msg, pct: progress_callback(msg, pct) if progress_callback else None
                 )
                 
-                # Clean up download
-                update_file.unlink()
-                
-                # Restart
                 if progress_callback:
-                    progress_callback("Restarting...", 100)
-                time.sleep(2)
-                restart_application()
+                    progress_callback("Restarting to apply updates...", 100)
+                time.sleep(1)
+                
+                # Execute batch script and self-terminate
+                restart_application(bat_path)
                 
             except Exception as e:
                 if progress_callback:
@@ -271,9 +227,7 @@ class AutoUpdater:
         threading.Thread(target=_install, daemon=True).start()
         return True
 
-
 if __name__ == "__main__":
-    # Test the updater
     print(f"Current version: {get_current_version()}")
     print("Checking for updates...")
     result = check_for_updates()
