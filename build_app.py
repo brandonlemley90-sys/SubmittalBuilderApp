@@ -13,9 +13,11 @@ from pathlib import Path
 
 # Configuration
 APP_NAME = "DenierAI_Submittal_Builder"
-VERSION = "1.0.0"
+VERSION = "1.0.1"  # ← Increment this before each build
+RELEASE_NOTES = f"Version {VERSION} - Bug fixes and updated reset password functionality for admin users"
 OUTPUT_DIR = Path("dist")
 BUILD_DIR = Path("build")
+
 
 def clean_build_directories():
     """Clean previous build artifacts"""
@@ -36,7 +38,7 @@ def install_dependencies():
         "pyinstaller",
         "werkzeug"
     ]
-    
+
     for package in requirements:
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--quiet"])
@@ -47,37 +49,32 @@ def install_dependencies():
 def build_executable():
     """Build the executable using PyInstaller"""
     print("🔨 Building executable...")
-    
-    # Determine the correct separator for add-data based on OS
+
     if sys.platform == 'win32':
         data_sep = ';'
     else:
         data_sep = ':'
-    
-    # PyInstaller command
+
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--name", APP_NAME,
         "--onefile",
-        "--windowed",  # Use --console instead if you want a console window
+        "--windowed",
         f"--add-data=templates{data_sep}templates",
         f"--add-data=static{data_sep}static",
         "--hidden-import", "tkinter",
         "--hidden-import", "flask",
         "--hidden-import", "werkzeug.security",
     ]
-    
-    # Add icon if it exists
+
     if Path("icon.ico").exists():
         cmd.extend(["--icon", "icon.ico"])
-    
-    # Add version file if it exists
+
     if Path("version.txt").exists():
         cmd.extend(["--version-file", "version.txt"])
-    
-    # Add the main script
+
     cmd.append("app.py")
-    
+
     try:
         subprocess.check_call(cmd)
         print("✅ Executable built successfully!")
@@ -90,90 +87,83 @@ def build_executable():
 def create_version_file():
     """Create version information file"""
     print("📝 Creating version file...")
-    
+
     version_info = {
-        "version": VERSION = "1.0.1"  # Increment version
-        "release_notes": f"Version {VERSION} - Bug fixes and updated reset password functionality for admin users",
+        "version": VERSION,
+        "release_notes": RELEASE_NOTES,
         "build_date": "2026"
     }
-    
-    # Create version.json for the app to read
+
     with open(OUTPUT_DIR / "version.json", 'w') as f:
         json.dump(version_info, f, indent=2)
-    
+
     print(f"✅ Version file created: {VERSION}")
 
 
 def create_update_package():
     """Create a zip package for distribution and updates"""
     print("📦 Creating update package...")
-    
-    # Find the built executable
+
     exe_path = OUTPUT_DIR / f"{APP_NAME}.exe" if sys.platform == 'win32' else OUTPUT_DIR / APP_NAME
-    
+
     if not exe_path.exists():
         print("❌ Executable not found! Build first.")
         return False
-    
-    # Create a temporary directory for the package
+
     package_dir = OUTPUT_DIR / "package_contents"
     if package_dir.exists():
         shutil.rmtree(package_dir)
     package_dir.mkdir()
-    
-    # Copy executable and necessary files
+
     shutil.copy(exe_path, package_dir / f"{APP_NAME}.exe")
-    
-    # Copy supporting files that should be included
+
     supporting_files = ['version.json']
     for file in supporting_files:
         src = OUTPUT_DIR / file
         if src.exists():
             shutil.copy(src, package_dir / file)
-    
-    # Create the zip file
+
     zip_path = OUTPUT_DIR / f"{APP_NAME}_v{VERSION}.zip"
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for file in package_dir.rglob('*'):
             if file.is_file():
                 arcname = file.relative_to(package_dir)
                 zipf.write(file, arcname)
-    
-    # Calculate hash for verification
+
     sha256_hash = hashlib.sha256()
     with open(zip_path, "rb") as f:
         for byte_block in iter(lambda: f.read(4096), b""):
             sha256_hash.update(byte_block)
-    
+
     file_hash = sha256_hash.hexdigest()
-    
-    # Clean up temp directory
+
     shutil.rmtree(package_dir)
-    
+
     print(f"✅ Update package created: {zip_path.name}")
     print(f"   SHA256: {file_hash}")
-    
-    # Create server version.json template
+
+    # server_version_template.json now pulls VERSION and RELEASE_NOTES from the
+    # top-level constants — no more hardcoded strings buried in this function
     server_version_info = {
         "version": VERSION,
-        "release_notes": f"Version {VERSION} - Initial Release with Auto-Update",
+        "release_notes": RELEASE_NOTES,
         "download_url": f"https://your-server.com/updates/{APP_NAME}_v{VERSION}.zip",
         "file_hash": file_hash,
-        "release_date": "2024-01-01"
+        "release_date": "2026"
     }
-    
+
     with open(OUTPUT_DIR / "server_version_template.json", 'w') as f:
         json.dump(server_version_info, f, indent=2)
-    
+
     print("✅ Server version template created")
-    
+
     return True
 
 
 def create_installer_script():
     """Create a simple installer batch script for Windows"""
     print("📜 Creating installer script...")
-    
+
     installer_content = f'''@echo off
 echo ========================================
 echo {APP_NAME} Installer
@@ -215,19 +205,23 @@ echo You can now run {APP_NAME} from your desktop.
 echo.
 pause
 '''
-    
+
     installer_path = OUTPUT_DIR / "install.bat"
     with open(installer_path, 'w') as f:
         f.write(installer_content)
-    
+
     print(f"✅ Installer script created: {installer_path.name}")
 
 
 def create_readme():
     """Create README with installation and update instructions"""
     print("📖 Creating README...")
-    
+
     readme_content = f'''# {APP_NAME} v{VERSION}
+
+## Release Notes
+
+{RELEASE_NOTES}
 
 ## Installation Instructions
 
@@ -305,13 +299,13 @@ For issues or questions, please contact your system administrator.
 
 ---
 
-© 2024 DenierAI. All rights reserved.
+© 2026 DenierAI. All rights reserved.
 '''
-    
+
     readme_path = OUTPUT_DIR / "README.md"
     with open(readme_path, 'w') as f:
         f.write(readme_content)
-    
+
     print(f"✅ README created: {readme_path.name}")
 
 
@@ -321,32 +315,23 @@ def main():
     print(f"Building {APP_NAME} v{VERSION}")
     print("=" * 60)
     print()
-    
-    # Step 1: Clean
+
     clean_build_directories()
-    
-    # Step 2: Install dependencies
     install_dependencies()
-    
-    # Step 3: Build executable
+
     if not build_executable():
         print("\n❌ Build failed! Exiting.")
         return False
-    
-    # Step 4: Create version file
+
     create_version_file()
-    
-    # Step 5: Create update package
+
     if not create_update_package():
         print("\n❌ Package creation failed! Exiting.")
         return False
-    
-    # Step 6: Create installer
+
     create_installer_script()
-    
-    # Step 7: Create README
     create_readme()
-    
+
     print()
     print("=" * 60)
     print("✅ BUILD COMPLETE!")
@@ -364,10 +349,10 @@ def main():
     print("Next steps:")
     print("  1. Upload the .zip file to your update server")
     print("  2. Upload server_version_template.json as version.json")
-    print("  3. Update UPDATE_SERVER_URL in auto_updater.py for next build")
+    print("  3. Update VERSION and RELEASE_NOTES at the top of this file for next build")
     print("  4. Distribute the .zip file to users or provide download link")
     print()
-    
+
     return True
 
 

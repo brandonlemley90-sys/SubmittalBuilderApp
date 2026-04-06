@@ -1,361 +1,370 @@
-"""
-Build script to create a distributable executable with auto-update capability
-Run this script to build the application for distribution
-"""
-import os
 import sys
-import shutil
+import os
+import sqlite3
 import subprocess
-import zipfile
-import hashlib
+import webbrowser
+import threading
+import queue
 import json
-from pathlib import Path
+import hmac
+import hashlib
+import time
+from datetime import timedelta
+from threading import Timer
+from tkinter import filedialog
+import tkinter as tk
 
-# Configuration
-APP_NAME = "DenierAI_Submittal_Builder"
-VERSION = "1.0.1"  # ← Increment this before each build
-RELEASE_NOTES = f"Version {VERSION} - Bug fixes and updated reset password functionality for admin users"
-OUTPUT_DIR = Path("dist")
-BUILD_DIR = Path("build")
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from werkzeug.security import generate_password_hash, check_password_hash
 
+# --- 1. DATABASE & GLOBALS ---
+if os.name == 'nt':
+    app_data_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'DenierAI')
+else:
+    app_data_dir = os.path.expanduser('~/.denierai')
 
-def clean_build_directories():
-    """Clean previous build artifacts"""
-    print("🧹 Cleaning build directories...")
-    if OUTPUT_DIR.exists():
-        shutil.rmtree(OUTPUT_DIR)
-    if BUILD_DIR.exists():
-        shutil.rmtree(BUILD_DIR)
-    if Path("update_package.zip").exists():
-        Path("update_package.zip").unlink()
+if not os.path.exists(app_data_dir):
+    os.makedirs(app_data_dir)
 
+DB_PATH = os.path.join(app_data_dir, 'users.db')
 
-def install_dependencies():
-    """Ensure all required packages are installed"""
-    print("📦 Installing dependencies...")
-    requirements = [
-        "flask",
-        "pyinstaller",
-        "werkzeug"
-    ]
-
-    for package in requirements:
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--quiet"])
-        except subprocess.CalledProcessError as e:
-            print(f"Warning: Could not install {package}: {e}")
+active_process = None
+output_queue = queue.Queue()
 
 
-def build_executable():
-    """Build the executable using PyInstaller"""
-    print("🔨 Building executable...")
+def init_db():
+    """Initializes the database and ensures the schema is up to date."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+                       CREATE TABLE IF NOT EXISTS users
+                       (
+                           email    TEXT PRIMARY KEY,
+                           password TEXT,
+                           api_key  TEXT,
+                           pin      TEXT
+                       )
+                       ''')
 
-    if sys.platform == 'win32':
-        data_sep = ';'
-    else:
-        data_sep = ':'
+        # MIGRATIONS: Add new columns if they don't exist
+        for migration in [
+            "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN name TEXT DEFAULT ''",
+        ]:
+            try:
+                cursor.execute(migration)
+            except sqlite3.OperationalError:
+                pass
 
-    cmd = [
-        sys.executable, "-m", "PyInstaller",
-        "--name", APP_NAME,
-        "--onefile",
-        "--windowed",
-        f"--add-data=templates{data_sep}templates",
-        f"--add-data=static{data_sep}static",
-        "--hidden-import", "tkinter",
-        "--hidden-import", "flask",
-        "--hidden-import", "werkzeug.security",
-    ]
+        conn.commit()
 
-    if Path("icon.ico").exists():
-        cmd.extend(["--icon", "icon.ico"])
 
-    if Path("version.txt").exists():
-        cmd.extend(["--version-file", "version.txt"])
+init_db()
 
-    cmd.append("app.py")
 
+def resource_path(relative_path):
     try:
-        subprocess.check_call(cmd)
-        print("✅ Executable built successfully!")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Build failed: {e}")
-        return False
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 
-def create_version_file():
-    """Create version information file"""
-    print("📝 Creating version file...")
+# --- 2. FLASK CONFIG ---
+app = Flask(__name__, template_folder=resource_path('templates'), static_folder=resource_path('static'))
+app.secret_key = "denier_vault_production_2026"
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
-    version_info = {
-        "version": VERSION,
-        "release_notes": RELEASE_NOTES,
-        "build_date": "2026"
+MASTER_ADMIN_KEY = "DenierSubmittalsLemley90"
+
+
+# --- 3. HELPERS ---
+def _sign_payload(payload_str: str) -> str:
+    """Returns an HMAC-SHA256 hex digest of the payload string."""
+    return hmac.new(
+        MASTER_ADMIN_KEY.encode(),
+        payload_str.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+
+# --- 4. PROCESS HANDLING ---
+def enqueue_output(out, q):
+    for line in iter(out.readline, ''):
+        q.put(line)
+    out.close()
+
+
+@app.route('/get_logs')
+def get_logs():
+    logs = []
+    while not output_queue.empty():
+        logs.append(output_queue.get())
+    return jsonify({"logs": logs, "active": active_process is not None and active_process.poll() is None})
+
+
+@app.route('/send_input', methods=['POST'])
+def send_input():
+    global active_process
+    data = request.json
+    user_text = data.get("text", "") + "\n"
+    if active_process and active_process.poll() is None:
+        active_process.stdin.write(user_text)
+        active_process.stdin.flush()
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "No active process"}), 400
+
+
+# --- 5. NAVIGATION & AUTH ---
+@app.route('/')
+def home():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    with sqlite3.connect(DB_PATH) as conn:
+        user = conn.execute("SELECT name FROM users WHERE email = ?", (session['user_email'],)).fetchone()
+        user_name = user[0] if user and user[0] else ""
+
+    return render_template('index.html',
+                           is_admin=session.get('is_admin'),
+                           user_email=session['user_email'],
+                           user_name=user_name)
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        with sqlite3.connect(DB_PATH) as conn:
+            user = conn.execute("SELECT password, is_admin FROM users WHERE email = ?", (email,)).fetchone()
+        if user and check_password_hash(user[0], password):
+            session.update({"logged_in": True, "user_email": email, "is_admin": bool(user[1])})
+            return redirect(url_for('home'))
+        return render_template('login.html', error="Invalid password or email")
+    return render_template('login.html')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        hashed_pw = generate_password_hash(password)
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO users (email, password) VALUES (?, ?)", (email, hashed_pw))
+            return redirect(url_for('login'))
+        except sqlite3.IntegrityError:
+            return render_template('registration.html', error="Email already registered.")
+    return render_template('registration.html')
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+
+# --- 6. ACCOUNT & ADMIN TOOLS ---
+@app.route('/update_profile', methods=['POST'])
+def update_profile():
+    if not session.get('logged_in'):
+        return jsonify({"status": "error"}), 401
+    name = request.json.get('name', '')
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("UPDATE users SET name = ? WHERE email = ?", (name, session['user_email']))
+    return jsonify({"status": "success"})
+
+
+@app.route('/change_password', methods=['POST'])
+def change_password():
+    data = request.json
+    with sqlite3.connect(DB_PATH) as conn:
+        user = conn.execute("SELECT password FROM users WHERE email = ?", (session['user_email'],)).fetchone()
+        if user and check_password_hash(user[0], data.get('old_password')):
+            new_hashed = generate_password_hash(data.get('new_password'))
+            conn.execute("UPDATE users SET password = ? WHERE email = ?", (new_hashed, session['user_email']))
+            return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Incorrect current password"}), 400
+
+
+@app.route('/admin/promote_self', methods=['POST'])
+def promote_self():
+    if not session.get('logged_in'):
+        return "Unauthorized", 401
+    data = request.json
+    if data.get('secret_key') == MASTER_ADMIN_KEY:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute("UPDATE users SET is_admin = 1 WHERE email = ?", (session['user_email'],))
+        session['is_admin'] = True
+        return jsonify({"status": "success", "message": "Admin Access Granted!"})
+    return "Forbidden", 403
+
+
+# --- 7. PASSWORD RESET TOKEN SYSTEM ---
+@app.route('/admin/generate_reset_token', methods=['POST'])
+def generate_reset_token():
+    """
+    Admin generates a signed .denierreset file to send to the user.
+    The file is downloaded client-side and delivered manually (email, Teams, etc.).
+    The user imports it into their own local app to update their local DB.
+    """
+    if not session.get('is_admin'):
+        return jsonify({"status": "error", "message": "Admin access required."}), 403
+
+    data = request.json
+    target_email = data.get('email', '').strip()
+    new_password = data.get('new_password', '').strip()
+
+    if not target_email or not new_password:
+        return jsonify({"status": "error", "message": "Email and new password are required."}), 400
+
+    hashed_pw = generate_password_hash(new_password)
+    expires_at = int(time.time()) + (72 * 3600)  # 72-hour expiry
+
+    payload = {
+        "email": target_email,
+        "hashed_password": hashed_pw,
+        "expires_at": expires_at
     }
 
-    with open(OUTPUT_DIR / "version.json", 'w') as f:
-        json.dump(version_info, f, indent=2)
-
-    print(f"✅ Version file created: {VERSION}")
-
-
-def create_update_package():
-    """Create a zip package for distribution and updates"""
-    print("📦 Creating update package...")
-
-    exe_path = OUTPUT_DIR / f"{APP_NAME}.exe" if sys.platform == 'win32' else OUTPUT_DIR / APP_NAME
-
-    if not exe_path.exists():
-        print("❌ Executable not found! Build first.")
-        return False
-
-    package_dir = OUTPUT_DIR / "package_contents"
-    if package_dir.exists():
-        shutil.rmtree(package_dir)
-    package_dir.mkdir()
-
-    shutil.copy(exe_path, package_dir / f"{APP_NAME}.exe")
-
-    supporting_files = ['version.json']
-    for file in supporting_files:
-        src = OUTPUT_DIR / file
-        if src.exists():
-            shutil.copy(src, package_dir / file)
-
-    zip_path = OUTPUT_DIR / f"{APP_NAME}_v{VERSION}.zip"
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for file in package_dir.rglob('*'):
-            if file.is_file():
-                arcname = file.relative_to(package_dir)
-                zipf.write(file, arcname)
-
-    sha256_hash = hashlib.sha256()
-    with open(zip_path, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-
-    file_hash = sha256_hash.hexdigest()
-
-    shutil.rmtree(package_dir)
-
-    print(f"✅ Update package created: {zip_path.name}")
-    print(f"   SHA256: {file_hash}")
-
-    # server_version_template.json now pulls VERSION and RELEASE_NOTES from the
-    # top-level constants — no more hardcoded strings buried in this function
-    server_version_info = {
-        "version": VERSION,
-        "release_notes": RELEASE_NOTES,
-        "download_url": f"https://your-server.com/updates/{APP_NAME}_v{VERSION}.zip",
-        "file_hash": file_hash,
-        "release_date": "2026"
-    }
-
-    with open(OUTPUT_DIR / "server_version_template.json", 'w') as f:
-        json.dump(server_version_info, f, indent=2)
-
-    print("✅ Server version template created")
-
-    return True
-
-
-def create_installer_script():
-    """Create a simple installer batch script for Windows"""
-    print("📜 Creating installer script...")
-
-    installer_content = f'''@echo off
-echo ========================================
-echo {APP_NAME} Installer
-echo Version {VERSION}
-echo ========================================
-echo.
-
-REM Check if running as administrator
-net session >nul 2>&1
-if %errorLevel% neq 0 (
-    echo Please run as Administrator
-    pause
-    exit /b
-)
-
-REM Set installation directory
-set INSTALL_DIR=%PROGRAMFILES%\\{APP_NAME}
-
-echo Installing to %INSTALL_DIR%
-echo.
-
-REM Create installation directory
-if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-
-REM Extract files (assuming this is run from the extracted zip)
-echo Copying files...
-xcopy /E /Y /Q "%~dp0*" "%INSTALL_DIR%\\"
-
-REM Create shortcut
-echo Creating desktop shortcut...
-powershell "$WShell = New-Object -ComObject WScript.Shell; $Shortcut = $WShell.CreateShortcut('%USERPROFILE%\\Desktop\\{APP_NAME}.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\\{APP_NAME}.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Save()"
-
-echo.
-echo ========================================
-echo Installation Complete!
-echo ========================================
-echo.
-echo You can now run {APP_NAME} from your desktop.
-echo.
-pause
-'''
-
-    installer_path = OUTPUT_DIR / "install.bat"
-    with open(installer_path, 'w') as f:
-        f.write(installer_content)
-
-    print(f"✅ Installer script created: {installer_path.name}")
-
-
-def create_readme():
-    """Create README with installation and update instructions"""
-    print("📖 Creating README...")
-
-    readme_content = f'''# {APP_NAME} v{VERSION}
-
-## Release Notes
-
-{RELEASE_NOTES}
-
-## Installation Instructions
-
-### For End Users:
-
-1. Download the ZIP file: `{APP_NAME}_v{VERSION}.zip`
-2. Extract the contents to a folder
-3. Run `install.bat` as Administrator
-4. A shortcut will be created on your desktop
-
-### Manual Installation:
-
-1. Download and extract the ZIP file
-2. Copy all files to your desired installation folder (e.g., `C:\\Program Files\\{APP_NAME}`)
-3. Create a shortcut to `{APP_NAME}.exe` on your desktop
-
-## Auto-Update Feature
-
-This application includes automatic update functionality:
-
-1. When you start the app, it will check for updates automatically
-2. If an update is available, you'll be prompted to download and install it
-3. The update will download in the background and install automatically
-4. The application will restart with the new version
-
-### How Updates Work:
-
-- The app checks a central server for new versions
-- Updates are downloaded securely with hash verification
-- Your settings and data are preserved during updates
-- Failed updates automatically roll back to the previous version
-
-## Requirements
-
-- Windows 10 or later
-- Internet connection (for initial setup and updates)
-- Python 3.8+ (only if running from source)
-
-## Running from Source (Developers)
-
-If you want to run the application without building:
-
-```bash
-# Install dependencies
-pip install flask werkzeug pyinstaller
-
-# Run the application
-python app.py
-```
-
-## For Administrators/Deployers
-
-To set up the update server:
-
-1. Host the ZIP file on a web server
-2. Host the `server_version_template.json` file (rename to `version.json`)
-3. Update the `UPDATE_SERVER_URL` in `auto_updater.py` before building
-4. Distribute the built application to users
-
-## Troubleshooting
-
-### App won't start:
-- Make sure you have administrator privileges
-- Check if Windows Defender is blocking the app
-- Try running as Administrator
-
-### Updates failing:
-- Check your internet connection
-- Make sure your firewall allows the app
-- Contact support if the problem persists
-
-## Support
-
-For issues or questions, please contact your system administrator.
-
----
-
-© 2026 DenierAI. All rights reserved.
-'''
-
-    readme_path = OUTPUT_DIR / "README.md"
-    with open(readme_path, 'w') as f:
-        f.write(readme_content)
-
-    print(f"✅ README created: {readme_path.name}")
-
-
-def main():
-    """Main build process"""
-    print("=" * 60)
-    print(f"Building {APP_NAME} v{VERSION}")
-    print("=" * 60)
-    print()
-
-    clean_build_directories()
-    install_dependencies()
-
-    if not build_executable():
-        print("\n❌ Build failed! Exiting.")
-        return False
-
-    create_version_file()
-
-    if not create_update_package():
-        print("\n❌ Package creation failed! Exiting.")
-        return False
-
-    create_installer_script()
-    create_readme()
-
-    print()
-    print("=" * 60)
-    print("✅ BUILD COMPLETE!")
-    print("=" * 60)
-    print()
-    print(f"Distribution files are in: {OUTPUT_DIR.absolute()}")
-    print()
-    print("Files created:")
-    print(f"  - {APP_NAME}.exe (the application)")
-    print(f"  - {APP_NAME}_v{VERSION}.zip (distribution package)")
-    print(f"  - install.bat (Windows installer)")
-    print(f"  - README.md (instructions)")
-    print(f"  - server_version_template.json (for update server)")
-    print()
-    print("Next steps:")
-    print("  1. Upload the .zip file to your update server")
-    print("  2. Upload server_version_template.json as version.json")
-    print("  3. Update VERSION and RELEASE_NOTES at the top of this file for next build")
-    print("  4. Distribute the .zip file to users or provide download link")
-    print()
-
-    return True
-
-
-if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    payload_str = json.dumps(payload, sort_keys=True)
+    signature = _sign_payload(payload_str)
+
+    token_data = {"payload": payload, "signature": signature}
+    safe_name = target_email.split('@')[0].replace('.', '_')
+
+    return jsonify({
+        "status": "success",
+        "token": token_data,
+        "filename": f"reset_{safe_name}.denierreset"
+    })
+
+
+@app.route('/apply_reset', methods=['POST'])
+def apply_reset():
+    """
+    User imports the .denierreset file generated by the admin.
+    Validates signature, expiry, and email match before updating the local DB.
+    """
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "You must be logged in to apply a reset."}), 401
+
+    data = request.json
+    token_data = data.get('token')
+
+    if not token_data or 'payload' not in token_data or 'signature' not in token_data:
+        return jsonify({"status": "error", "message": "Invalid or malformed reset file."}), 400
+
+    payload = token_data['payload']
+    received_signature = token_data['signature']
+
+    # 1. Verify HMAC signature — catches tampered/forged files
+    payload_str = json.dumps(payload, sort_keys=True)
+    expected_signature = _sign_payload(payload_str)
+
+    if not hmac.compare_digest(expected_signature, received_signature):
+        return jsonify({"status": "error", "message": "Reset file signature is invalid or has been tampered with."}), 403
+
+    # 2. Check expiry
+    if int(time.time()) > payload.get('expires_at', 0):
+        return jsonify({"status": "error", "message": "This reset file has expired. Ask your admin to generate a new one."}), 403
+
+    # 3. Confirm the reset file targets the currently logged-in user
+    if payload.get('email') != session.get('user_email'):
+        return jsonify({
+            "status": "error",
+            "message": f"This reset file is for a different account ({payload.get('email')}). Log in with that account first."
+        }), 403
+
+    # 4. Apply the new password to the local database
+    with sqlite3.connect(DB_PATH) as conn:
+        rows_updated = conn.execute(
+            "UPDATE users SET password = ? WHERE email = ?",
+            (payload['hashed_password'], session['user_email'])
+        ).rowcount
+
+    if rows_updated == 0:
+        return jsonify({"status": "error", "message": "User account not found in local database."}), 404
+
+    return jsonify({"status": "success", "message": "Password updated! Please log out and log back in with your new password."})
+
+
+# --- 8. VAULT & BROWSE ---
+@app.route('/save_api_vault', methods=['POST'])
+def save_api_vault():
+    data = request.json
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("UPDATE users SET api_key = ?, pin = ? WHERE email = ?",
+                     (data['api_key'], data['pin'], session['user_email']))
+    return jsonify({"status": "success", "message": "Vault Updated!"})
+
+
+@app.route('/unlock_api_vault', methods=['POST'])
+def unlock_api_vault():
+    with sqlite3.connect(DB_PATH) as conn:
+        res = conn.execute("SELECT api_key, pin FROM users WHERE email = ?", (session['user_email'],)).fetchone()
+    if res and str(res[1]) == str(request.json.get('pin')):
+        return jsonify({"status": "success", "api_key": res[0]})
+    return jsonify({"status": "error"}), 401
+
+
+@app.route('/browse_folder')
+def browse_folder():
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    f = filedialog.askdirectory()
+    root.destroy()
+    return jsonify({"path": os.path.normpath(f) if f else ""})
+
+
+@app.route('/browse_file')
+def browse_file():
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    f = filedialog.askopenfilename()
+    root.destroy()
+    return jsonify({"filename": os.path.basename(f) if f else ""})
+
+
+# --- 9. LAUNCH ---
+@app.route('/launch', methods=['POST'])
+def launch():
+    global active_process
+    if active_process and active_process.poll() is None:
+        return jsonify({"status": "error", "message": "Builder already running!"})
+
+    data = request.json
+    meta_script = resource_path("SubmittalBuilderMetaAgent.py")
+    env = os.environ.copy()
+    env.update({
+        "GEMINI_API_KEY":        data.get("api_key", ""),
+        "PROJECT_FOLDER":        data.get("folder", ""),
+        "EXCEL_WORKBOOK_NAME":   data.get("excel", ""),
+        "JOB_FORM_PDF_NAME":     data.get("form", ""),
+        "SPEC_PDF_NAME":         data.get("specs", ""),
+        "DRAWINGS_PDF_NAME":     data.get("drawings", ""),
+        "CONTRACT_PDF_NAME":     data.get("contract", "")
+    })
+    active_process = subprocess.Popen(
+        [sys.executable, "-u", meta_script, "--web"],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+        creationflags=0x08000000
+    )
+    t = threading.Thread(target=enqueue_output, args=(active_process.stdout, output_queue))
+    t.daemon = True
+    t.start()
+    return jsonify({"status": "success"})
+
+
+if __name__ == '__main__':
+    Timer(1.5, lambda: webbrowser.open_new("http://127.0.0.1:5001/")).start()
+    app.run(debug=True, use_reloader=False, port=5001)
