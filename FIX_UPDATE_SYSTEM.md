@@ -5,8 +5,8 @@
 Your GitHub repository has the files, but the **`version.json`** file had the **wrong download URL**. 
 
 ### The Issue:
-- ✅ `version.json` is accessible at: https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates/version.json
-- ✅ The ZIP file exists at: https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates/DenierAI_Submittal_Builder_v1.0.1.zip
+- ✅ `version.json` is accessible at: https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates
+- ✅ The ZIP file exists at: https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/DenierAI_Submittal_Builder_v1.0.1.zip
 - ❌ **BUT** the `version.json` had wrong URL: `https://brandonlemley90-sys.github.io/denierai-updates/updates/...` (wrong repo name!)
 
 ---
@@ -16,7 +16,7 @@ Your GitHub repository has the files, but the **`version.json`** file had the **
 ### Step 1: Update version.json in Your GitHub Repo
 
 1. Go to your GitHub repo:  
-   **https://github.com/brandonlemley90-sys/DenierSubmittalBuilderAgentUpdates/tree/main/updates**
+   **https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates**
 
 2. Click on **`version.json`** file
 
@@ -45,7 +45,7 @@ Your GitHub repository has the files, but the **`version.json`** file had the **
 Run this command to verify:
 
 ```bash
-curl -s "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates/version.json"
+curl -s "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates"
 ```
 
 You should see the corrected `download_url` pointing to the right location.
@@ -98,7 +98,7 @@ Go to your repo's `updates/version.json` and update:
 {
   "version": "1.0.2",
   "release_notes": "Version 1.0.2 - Your new features here",
-  "download_url": "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates/DenierAI_Submittal_Builder_v1.0.2.zip",
+  "download_url": "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/DenierAI_Submittal_Builder_v1.0.2.zip",
   "file_hash": "YOUR_NEW_HASH_HERE",
   "release_date": "2024-01-02"
 }
@@ -117,7 +117,7 @@ GitHub Pages will deploy automatically. All users will see the update!
 
 ## ✅ Verification Checklist
 
-- [x] GitHub repo exists: `DenierSubmittalBuilderAgentUpdates`
+- [x] GitHub repo exists: `DenierSubmittalBuilderUpdates`
 - [x] Files are in `/updates/` folder
 - [x] GitHub Pages is enabled
 - [ ] **`version.json` has correct download_url** ← **DO THIS NOW!**
@@ -135,22 +135,22 @@ GitHub Pages will deploy automatically. All users will see the update!
 3. Verify both URLs work:
    ```bash
    # Should return JSON
-   curl -s "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates/version.json"
+   curl -s "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/version.json"
    
    # Should download ZIP (returns HTTP 200)
-   curl -I "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates/DenierAI_Submittal_Builder_v1.0.1.zip"
+   curl -I "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/DenierAI_Submittal_Builder_v1.0.1.zip"
    ```
 
 ---
 
 ## 📞 Quick Reference
 
-| Component | URL | Status |
-|-----------|-----|--------|
-| GitHub Repo | https://github.com/brandonlemley90-sys/DenierSubmittalBuilderAgentUpdates | ✅ Working |
-| Version Info | https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates/version.json | ✅ Working |
-| Download ZIP | https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates/DenierAI_Submittal_Builder_v1.0.1.zip | ✅ Working |
-| Code Config | `auto_updater.py` line 21 | ✅ Correct URL |
+| Component | URL                                                                                                       | Status |
+|-----------|-----------------------------------------------------------------------------------------------------------|--------|
+| GitHub Repo | https://github.com/brandonlemley90-sys/DenierSubmittalBuilderUpdates                                      | ✅ Working |
+| Version Info | https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/version.json                          | ✅ Working |
+| Download ZIP | https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/DenierAI_Submittal_Builder_v1.0.1.zip | ✅ Working |
+| Code Config | `auto_updater.py` line 21                                                                                 | ✅ Correct URL |
 
 ---
 

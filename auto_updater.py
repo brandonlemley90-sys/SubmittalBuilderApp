@@ -18,8 +18,8 @@ from urllib.error import URLError
 # ---------------------------------------------------------
 # CONFIGURATION - Pointing to your GitHub Pages Repo
 # ---------------------------------------------------------
-UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates" 
-CURRENT_VERSION = "1.0.1"
+UPDATE_SERVER_URL = "https://github.com/brandonlemley90-sys/DenierSubmittalBuilderUpdates
+CURRENT_VERSION = "1.0.2"
 VERSION_FILE = "version.json"
 APP_NAME = "DenierAI_Submittal_Builder"
 # ---------------------------------------------------------
@@ -146,7 +146,7 @@ def install_update(update_package, callback=None):
             
         # Determine the name of the main executable
         exe_name = Path(sys.executable).name if getattr(sys, 'frozen', False) else "main.py"
-        
+
         # Create a batch script to handle the overwrite after the app closes
         bat_path = app_dir / "apply_update.bat"
         bat_content = f"""@echo off

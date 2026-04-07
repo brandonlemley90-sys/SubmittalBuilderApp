@@ -8,7 +8,7 @@ This guide will help you set up a working auto-update system that shows updates 
 
 Your app currently checks for updates at:
 ```
-https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates/version.json
+https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates
 ```
 
 If this URL doesn't exist or returns an error, users won't see update notifications.
@@ -68,7 +68,7 @@ Keep this terminal open!
 
 Edit `auto_updater.py`, change line 21:
 ```python
-UPDATE_SERVER_URL = "http://localhost:8080"
+UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates"
 ```
 
 ### Step 6: Test It!
@@ -96,7 +96,7 @@ python deploy_to_github.py
 
 Follow the prompts:
 - Enter your GitHub username: `brandonlemley90-sys`
-- Enter repo name: `DenierSubmittalBuilderAgentUpdates` (or press enter for default)
+- Enter repo name: `DenierSubmittalBuilderUpdates` (or press enter for default)
 
 This creates a `deploy_for_github/updates/` folder with:
 - Your ZIP file
@@ -105,7 +105,7 @@ This creates a `deploy_for_github/updates/` folder with:
 ### Step 3: Create GitHub Repository
 
 1. Go to https://github.com/new
-2. Repository name: `DenierSubmittalBuilderAgentUpdates`
+2. Repository name: `DenierSubmittalBuilderUpdates`
 3. Make it **Public**
 4. Click "Create repository"
 
@@ -138,7 +138,7 @@ git push -u origin main
 
 GitHub Pages takes 1-3 minutes to deploy. Test it:
 ```
-https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates/version.json
+https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates
 ```
 
 You should see JSON output. If you get 404, wait longer or check Steps 3-4.
@@ -147,7 +147,7 @@ You should see JSON output. If you get 404, wait longer or check Steps 3-4.
 
 Your `auto_updater.py` should already have the correct URL:
 ```python
-UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates/updates"
+UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates"
 ```
 
 And `bootstrap_installer.py` line 15 should match.
@@ -258,7 +258,7 @@ When an update is available:
 - Wait 2-3 minutes after pushing
 - Check Settings → Pages is enabled
 - Ensure files are in root or correct folder
-- Try: `https://username.github.io/repo/updates/version.json`
+- Try: `https://username.github.io/repo
 
 ---
 

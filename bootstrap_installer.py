@@ -12,7 +12,7 @@ from pathlib import Path
 # ==========================================
 # CONFIGURATION 
 # ==========================================
-UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderAgentUpdates"
+UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates"
 APP_NAME = "DenierAI Submittal Builder"
 INSTALL_DIR = Path(os.environ.get('LOCALAPPDATA')) / "DenierAI_Submittal_Builder"
 BOOTSTRAP_VERSION = "1.0.0"

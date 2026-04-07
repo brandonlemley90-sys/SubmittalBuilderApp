@@ -40,7 +40,7 @@ Go to https://github.com and sign up (free)
 #### 4. Note Your URL
 Your site will be at:
 ```
-https://YOUR_USERNAME.github.io/denierai-updates/
+https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates
 ```
 
 #### 5. Upload Your Files
@@ -67,12 +67,12 @@ Edit these files in your project:
 
 **auto_updater.py:**
 ```python
-UPDATE_SERVER_URL = "https://YOUR_USERNAME.github.io/denierai-updates/updates"
+UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/denierai-updates/updates" 
 ```
 
 **bootstrap_installer.py:**
 ```python
-UPDATE_SERVER_URL = "https://YOUR_USERNAME.github.io/denierai-updates/updates"
+UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/denierai-updates/updates"
 ```
 
 #### 7. Rebuild Your App
@@ -84,7 +84,7 @@ python build_bootstrap.py
 #### 8. Test It
 Visit in your browser:
 ```
-https://YOUR_USERNAME.github.io/denierai-updates/updates/version.json
+https://brandonlemley90-sys.github.io/denierai-updates/updates/version.json
 ```
 
 You should see the JSON content displayed.
@@ -248,7 +248,7 @@ Your `version.json` should look like this:
   "version": "1.0.1",
   "release_date": "2024-01-15",
   "release_notes": "- Fixed bug with PDF exports\n- Improved performance\n- Added new wire types",
-  "download_url": "https://YOUR_USERNAME.github.io/denierai-updates/updates/DenierAI_Submittal_Builder_v1.0.1.zip",
+  "download_url": "https://brandonlemley90-sys.github.io/denierai-updates/updates/DenierAI_Submittal_Builder_v1.0.1.zip",
   "file_hash": "SHA256_HASH_OF_ZIP_FILE",
   "minimum_version": "1.0.0"
 }

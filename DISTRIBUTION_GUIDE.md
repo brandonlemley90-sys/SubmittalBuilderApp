@@ -61,7 +61,7 @@ This solution eliminates the need to send ZIP files to users. Instead, users dow
 
 Edit `auto_updater.py` and `bootstrap_installer.py`:
 ```python
-UPDATE_SERVER_URL = "https://your-server.com/updates"
+UPDATE_SERVER_URL = https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/version.json"
 ```
 
 Replace with your actual server URL where you'll host updates.

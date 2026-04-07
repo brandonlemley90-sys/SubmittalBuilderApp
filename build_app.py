@@ -13,8 +13,8 @@ from pathlib import Path
 
 # Configuration
 APP_NAME = "DenierAI_Submittal_Builder"
-VERSION = "1.0.1"  # ← Increment this before each build
-RELEASE_NOTES = f"Version {VERSION} - Bug fixes and updated reset password functionality for admin users"
+VERSION = "1.0.2"  # ← Increment this before each build
+RELEASE_NOTES = f"Version {VERSION} - Bug fixes and updated reset password functionality for admin users. Added new rep."
 OUTPUT_DIR = Path("dist")
 BUILD_DIR = Path("build")
 
@@ -147,7 +147,7 @@ def create_update_package():
     server_version_info = {
         "version": VERSION,
         "release_notes": RELEASE_NOTES,
-        "download_url": f"https://your-server.com/updates/{APP_NAME}_v{VERSION}.zip",
+        "download_url": f"https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/{APP_NAME}_v{VERSION}.zip",
         "file_hash": file_hash,
         "release_date": "2026"
     }
@@ -299,7 +299,7 @@ For issues or questions, please contact your system administrator.
 
 ---
 
-© 2026 DenierAI. All rights reserved.
+© 2026 BuildItRight Software. All rights reserved.
 '''
 
     readme_path = OUTPUT_DIR / "README.md"

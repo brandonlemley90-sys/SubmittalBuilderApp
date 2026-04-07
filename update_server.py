@@ -82,11 +82,11 @@ class UpdateServerHandler(SimpleHTTPRequestHandler):
 def create_sample_version_file():
     """Create a sample version.json file for testing"""
     sample_version = {
-        "version": "1.0.0",
+        "version": "1.0.1",
         "release_notes": "Initial release with auto-update functionality",
         "download_url": f"http://localhost:{PORT}/DenierAI_Submittal_Builder_v1.0.0.zip",
         "file_hash": "placeholder_hash_update_after_build",
-        "release_date": "2024-01-01"
+        "release_date": "2026-04-07"
     }
     
     version_path = os.path.join(UPDATES_DIR, "version.json")

@@ -35,4 +35,5 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+deploy_for_github/
 ```

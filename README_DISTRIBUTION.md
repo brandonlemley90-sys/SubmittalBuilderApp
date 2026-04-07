@@ -31,7 +31,7 @@ Edit these files with your actual server URL:
 - `bootstrap_installer.py` (line 15)
 
 ```python
-UPDATE_SERVER_URL = "https://your-server.com/updates"
+UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates"
 ```
 
 ### Step 3: Upload to Your Server
