@@ -18,7 +18,7 @@ from urllib.error import URLError
 # ---------------------------------------------------------
 # CONFIGURATION - Pointing to your GitHub Pages Repo
 # ---------------------------------------------------------
-UPDATE_SERVER_URL = "https://github.com/brandonlemley90-sys/DenierSubmittalBuilderUpdates
+UPDATE_SERVER_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates"
 CURRENT_VERSION = "1.0.2"
 VERSION_FILE = "version.json"
 APP_NAME = "DenierAI_Submittal_Builder"

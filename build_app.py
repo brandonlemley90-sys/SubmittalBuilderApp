@@ -10,11 +10,16 @@ import zipfile
 import hashlib
 import json
 from pathlib import Path
+from datetime import date
 
-# Configuration
+# ================================================================
+# CONFIGURATION — Edit these two values before each build
+# ================================================================
 APP_NAME = "DenierAI_Submittal_Builder"
-VERSION = "1.0.2"  # ← Increment this before each build
-RELEASE_NOTES = f"Version {VERSION} - Bug fixes and updated reset password functionality for admin users. Added new rep."
+VERSION = "1.0.2"          # ← Increment this before each build
+RELEASE_NOTES = "Bug fixes and updated reset password functionality for admin users. Added new rep."  # ← Describe what changed
+UPDATE_REPO_BASE_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates"  # ← GitHub Pages URL (no trailing slash)
+# ================================================================
 OUTPUT_DIR = Path("dist")
 BUILD_DIR = Path("build")
 
@@ -142,18 +147,23 @@ def create_update_package():
     print(f"✅ Update package created: {zip_path.name}")
     print(f"   SHA256: {file_hash}")
 
-    # server_version_template.json now pulls VERSION and RELEASE_NOTES from the
-    # top-level constants — no more hardcoded strings buried in this function
+    # Build server_version_template.json from top-level constants — no hardcoded strings
+    today = date.today().isoformat()  # e.g. "2026-04-08"
     server_version_info = {
         "version": VERSION,
-        "release_notes": RELEASE_NOTES,
-        "download_url": f"https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/{APP_NAME}_v{VERSION}.zip",
+        "release_notes": f"Version {VERSION} - {RELEASE_NOTES}",
+        "download_url": f"{UPDATE_REPO_BASE_URL}/{APP_NAME}_v{VERSION}.zip",
         "file_hash": file_hash,
-        "release_date": "2026"
+        "release_date": today
     }
 
     with open(OUTPUT_DIR / "server_version_template.json", 'w') as f:
         json.dump(server_version_info, f, indent=2)
+
+    # Also update the local version.json so the source repo stays in sync
+    with open("version.json", 'w') as f:
+        json.dump(server_version_info, f, indent=2)
+    print("✅ version.json (local) updated")
 
     print("✅ Server version template created")
 
