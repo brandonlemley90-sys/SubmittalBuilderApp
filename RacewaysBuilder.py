@@ -6,6 +6,16 @@ import os
 import re
 import sys
 import datetime
+
+def web_prompt(prompt_type, message):
+    if os.environ.get("RUNNING_FROM_WEB") == "TRUE":
+        print(f"___PROMPT___|{prompt_type}|{message}")
+        import sys
+        sys.stdout.flush()
+        return sys.stdin.readline().strip()
+    else:
+        return input(message).strip()
+
 import time
 
 # =============================================================================
@@ -46,7 +56,7 @@ COL_DESC = "description"
 def ask_to_continue(step_name, error_msg):
     print(f"\n❌ [FAILURE DETECTED] {step_name}")
     print(f"   Error Details: {error_msg}")
-    ans = input("   Do you want to attempt to continue anyway? (Y/N): ").strip().upper()
+    ans = web_prompt("YN", "   Do you want to attempt to continue anyway? (Y/N): ").upper()
     if ans != 'Y':
         print("\n🛑 Script aborted by user.")
         sys.exit(1)
@@ -471,7 +481,7 @@ def save_pdf_with_retry(merged_doc, output_path, max_attempts=3):
         if check_file_locked(output_path):
             print(f"\n⚠️  OUTPUT FILE IS LOCKED (attempt {attempt}/{max_attempts})")
             print(f"   Close '{output_path}' in Bluebeam/Acrobat, then press Enter...")
-            input("   Press Enter when ready: ")
+            web_prompt("ENTER", "Press CONFIRM / PROCEED when ready:")
         else:
             try:
                 merged_doc.save(output_path)
@@ -479,7 +489,7 @@ def save_pdf_with_retry(merged_doc, output_path, max_attempts=3):
             except PermissionError:
                 print(f"⚠️  Still locked. Close the file and press Enter... ({attempt}/{max_attempts})")
                 if attempt < max_attempts:
-                    input("   Press Enter when ready: ")
+                    web_prompt("ENTER", "Press CONFIRM / PROCEED when ready:")
     print(f"❌ Could not save after {max_attempts} attempts.")
     return False
 
@@ -550,51 +560,13 @@ try:
     # --- LOAD PROJECT INFO FORM ---
     print("--- Loading Project Form PDF ---")
     job_info = {
-        "Job_Number": "Unknown",
-        "Job_Name": project_name,
-        "Address": "",
-        "City_State_Zip": ""
+        "Job_Number": os.environ.get("META_JOB_NUMBER", "Unknown"),
+        "Job_Name": os.environ.get("META_JOB_NAME", project_name),
+        "Address": os.environ.get("META_JOB_ADDRESS", ""),
+        "City_State_Zip": os.environ.get("META_JOB_CITY_STATE_ZIP", "")
     }
-
-    if JOB_FORM_PDF_NAME and "ERROR" not in JOB_FORM_PDF_NAME:
-        form_pdf_path = os.path.abspath(os.path.join(PROJECT_FOLDER, JOB_FORM_PDF_NAME))
-        print(f"   ✅ Using Selected Form: {JOB_FORM_PDF_NAME}")
-
-        name_match = re.match(r'(\d{2}-\d{2}-\d{4})\s*-\s*(.*)\.pdf', JOB_FORM_PDF_NAME, re.IGNORECASE)
-        if name_match:
-            job_info["Job_Number"] = name_match.group(1).strip()
-            job_info["Job_Name"] = name_match.group(2).strip()
-
-        print("   Asking AI to extract address information from the form...")
-        try:
-            form_text = extract_text_from_pdf(form_pdf_path)
-            address_prompt = f"""
-            Extract the project details from the following form text and filename.
-            Filename: {JOB_FORM_PDF_NAME}
-
-            RULES:
-            1. Find the Job Number (format usually XX-XX-XXXX).
-            2. Find the Job Name (Project Name).
-            3. Find the Street Address.
-            4. Find the City, State, and Zip Code.
-
-            Return ONLY a raw JSON object with these exact keys:
-            "Job_Number", "Job_Name", "Address", "City_State_Zip"
-            """
-
-            raw_job_ai = call_llm_api(prompt=address_prompt, data=form_text[:15000])
-            extracted_job_info = json.loads(raw_job_ai)
-
-            for key in job_info.keys():
-                if extracted_job_info.get(key):
-                    job_info[key] = extracted_job_info[key]
-
-            print(f"   ✅ Extracted Data: {job_info['Job_Number']} | {job_info['Address']}")
-        except Exception as e:
-            print(f"   ⚠️ Could not fully extract data from form using AI: {e}")
-    else:
-        print("   ⚠️ No Job Setup Form was selected in the Meta Agent.")
-
+    print(f"   ✅ Using Extracted Data: {job_info['Job_Number']} | {job_info['Address']}")
+    
     # --- LOAD MASTER DEVICE LIST ---
     try:
         ws_list = wb.sheets['Raceways List']
@@ -842,13 +814,13 @@ OFFICIAL DATABASE LIST:
             print("   [2] Skip this item entirely")
             print("   [3] Abort the script so I can add it to my Excel database")
 
-            choice = input("   Select 1, 2, or 3: ").strip()
+            choice = web_prompt("CHOICE", "Select 1, 2, or 3:")
 
             if choice == '3':
                 print("\n🛑 Script aborted by user. Go update your Excel database and run it again!")
                 sys.exit()
             elif choice == '1':
-                sub_cat = input("   Enter the exact catalog number you want to use from the database: ").strip()
+                sub_cat = web_prompt("TEXT", "Enter the exact catalog number you want to use from the database: ")
                 if sub_cat.lower() in reference_dict:
                     extracted_type_clean = sub_cat.lower()
                     print(f"   ✅ Substituted '{extracted_type_raw}' with '{sub_cat}'.")
@@ -880,18 +852,18 @@ OFFICIAL DATABASE LIST:
 
             if fallback_paths:
                 print(f"\n    ⚠️  [ACTION REQUIRED] MISSING CUT SHEET FOR '{cat_val}'")
-                ans = input(f"    Do you want to use the base model '{base_cat}' PDF instead? (Y/N): ").strip().upper()
+                ans = web_prompt("YN", f"    Do you want to use the base model '{base_cat}' PDF instead? (Y/N): ").upper()
                 if ans == 'Y':
                     pdf_paths = fallback_paths
                     cat_val = base_cat
                 else:
-                    ans2 = input(f"    Write '{cat_val}' to the Excel Index WITHOUT a PDF? (Y/N): ").strip().upper()
+                    ans2 = web_prompt("YN", f"    Write '{cat_val}' to the Excel Index WITHOUT a PDF? (Y/N): ").upper()
                     if ans2 != 'Y':
                         print(f"    ⏭️  SKIPPED: '{cat_val}'")
                         continue
             else:
                 print(f"\n    ⚠️  [MISSING PDF] No cut sheet found in folder for '{cat_val}'.")
-                ans2 = input(f"    Write '{cat_val}' to the Excel Index WITHOUT a PDF? (Y/N): ").strip().upper()
+                ans2 = web_prompt("YN", f"    Write '{cat_val}' to the Excel Index WITHOUT a PDF? (Y/N): ").upper()
                 if ans2 != 'Y':
                     print(f"    ⏭️  SKIPPED: '{cat_val}'")
                     continue
@@ -1000,4 +972,4 @@ except Exception as e:
 
 finally:
     print("\n" + "=" * 40)
-    input("Press Enter to exit...")
+    web_prompt("ENTER", "Press CONFIRM / PROCEED to exit...")

@@ -3,6 +3,43 @@ import os
 import sys
 import tkinter as tk
 from tkinter import filedialog, simpledialog
+import json
+import requests
+import re
+import time
+import fitz
+
+def extract_text_from_pdf(pdf_path):
+    if not os.path.exists(pdf_path):
+        return ""
+    try:
+        doc = fitz.open(pdf_path)
+        text = "".join([page.get_text() for page in doc])
+        doc.close()
+        return text
+    except Exception:
+        return ""
+
+def call_llm_api(api_key, prompt, data):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [{"parts": [{"text": f"{prompt}\n\n{data}"}]}],
+        "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}
+    }
+    response = requests.post(url, headers=headers, json=payload, timeout=60)
+    if response.status_code == 200:
+        raw = response.json()['candidates'][0]['content']['parts'][0]['text']
+        return raw.strip().removeprefix('```json').removesuffix('```').strip()
+    return "{}"
+
+def web_prompt(prompt_type, message):
+    if len(sys.argv) > 1 and sys.argv[1] == "--web":
+        print(f"___PROMPT___|{prompt_type}|{message}")
+        sys.stdout.flush()
+        return sys.stdin.readline().strip()
+    else:
+        return input(message).strip()
 
 
 def get_user_setup():
@@ -102,6 +139,50 @@ def run_pipeline(master_api_key, project_config):
     env_vars["DRAWINGS_PDF_NAME"] = project_config["DRAWINGS_PDF_NAME"]
     env_vars["CONTRACT_PDF_NAME"] = project_config["CONTRACT_PDF_NAME"]
 
+    print("--- Extracting Job Core Info from Form ---")
+    form_pdf_path = os.path.join(project_config["PROJECT_FOLDER"], project_config["JOB_FORM_PDF_NAME"])
+    extracted_job_info = {"Job_Number": "Unknown", "Job_Name": "Unknown", "Address": "", "City_State_Zip": ""}
+    
+    if os.path.exists(form_pdf_path) and "ERROR" not in form_pdf_path:
+        name_match = re.match(r'(\d{2}-\d{2}-\d{4})\s*-\s*(.*)\.pdf', project_config["JOB_FORM_PDF_NAME"], re.IGNORECASE)
+        if name_match:
+            extracted_job_info["Job_Number"] = name_match.group(1).strip()
+            extracted_job_info["Job_Name"] = name_match.group(2).strip()
+
+        form_text = extract_text_from_pdf(form_pdf_path)
+        prompt = f"""
+        Extract the project details from the following form text and filename.
+        Filename: {project_config["JOB_FORM_PDF_NAME"]}
+        RULES:
+        1. Find the Job Number (format usually XX-XX-XXXX).
+        2. Find the Job Name (Project Name).
+        3. Find the Street Address.
+        4. Find the City, State, and Zip Code.
+        Return ONLY a raw JSON object with these exact keys:
+        "Job_Number", "Job_Name", "Address", "City_State_Zip"
+        """
+        try:
+            print("   Asking AI to extract address information from the form...")
+            raw_job_ai = call_llm_api(master_api_key, prompt, form_text[:15000])
+            ai_data = json.loads(raw_job_ai)
+            for k in extracted_job_info.keys():
+                if ai_data.get(k): extracted_job_info[k] = ai_data[k]
+            print(f"   ✅ Extracted Data: {extracted_job_info['Job_Number']} | {extracted_job_info['Address']}")
+        except Exception as e:
+            print(f"   ⚠️ Could not fully extract data from form using AI: {e}")
+    else:
+        print("   ⚠️ No Job Setup Form was selected. Moving on...")
+
+    env_vars["META_JOB_NUMBER"] = extracted_job_info["Job_Number"]
+    env_vars["META_JOB_NAME"] = extracted_job_info["Job_Name"]
+    env_vars["META_JOB_ADDRESS"] = extracted_job_info["Address"]
+    env_vars["META_JOB_CITY_STATE_ZIP"] = extracted_job_info["City_State_Zip"]
+
+    # Let the builder scripts know they don't need to prompt for an API key manually
+    env_vars["RUNNING_FROM_META"] = "TRUE"
+    if "--web" in sys.argv:
+        env_vars["RUNNING_FROM_WEB"] = "TRUE"
+
     print(f"\n🚀 Initiating One-Click Pipeline for folder:\n{project_config['PROJECT_FOLDER']}\n")
 
     for i, script in enumerate(scripts):
@@ -125,7 +206,7 @@ def run_pipeline(master_api_key, project_config):
             # If there are more scripts left, explicitly pause the pipeline
             if i < len(scripts) - 1:
                 print("\n⏸️  PIPELINE PAUSED.")
-                input("👉 Review your document in Bluebeam, then press ENTER to start the next submittal... ")
+                web_prompt("ENTER", "Review your document in Bluebeam. Press 'CONFIRM / PROCEED' when ready to start the next submittal.")
 
         except subprocess.CalledProcessError as e:
             print(f"\n❌ [{script}] -> FAILED.")
@@ -159,7 +240,7 @@ if __name__ == "__main__":
 
         # 3. Prevent the new native window from closing instantly when finished
         print("\n" + "=" * 60)
-        input("You may close this window. Press Enter to exit...")
+        web_prompt("ENTER", "All builds complete. You may close this page.")
 
     else:
         # If you run it manually without the web app, use the old tkinter pop-ups

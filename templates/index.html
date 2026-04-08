@@ -151,6 +151,20 @@
         </div>
     </div>
 
+    <div id="webPromptModal" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+        <div class="bg-zinc-800 border-[3px] border-[#008751] rounded-2xl p-8 w-full max-w-lg shadow-[0_0_50px_rgba(0,135,81,0.3)] transform transition-all">
+            <h3 class="text-xl font-black text-[#008751] uppercase tracking-[0.2em] mb-4 flex items-center gap-3">
+                <span class="animate-pulse bg-red-500/20 text-red-500 px-2 py-1 rounded text-sm border border-red-500/50">INPUT REQUIRED</span>
+                AGENT QUESTION
+            </h3>
+            <p id="promptMessage" class="text-lg text-white mb-8 leading-relaxed font-medium bg-zinc-900 border border-zinc-600 rounded-lg p-5 shadow-inner border-l-4 border-l-[#008751]"></p>
+            
+            <div id="promptControlsContainer" class="flex flex-col gap-4">
+                <!-- Dynamically populated buttons -->
+            </div>
+        </div>
+    </div>
+
     <div class="max-w-4xl w-full bg-zinc-800 rounded-xl shadow-2xl overflow-hidden border border-zinc-700">
 
         <div id="updateBanner" class="hidden bg-blue-900/80 border-b border-blue-500/50 px-8 py-3 flex items-center justify-between">
@@ -562,6 +576,11 @@
             const output = document.getElementById('terminalOutput');
 
             data.logs.forEach(line => {
+                if (line.includes('___PROMPT___|')) {
+                    handleWebPrompt(line);
+                    return;
+                }
+
                 const div = document.createElement('div');
                 div.className = "border-l-2 border-[#008751]/20 pl-3";
                 div.textContent = line;
@@ -579,6 +598,60 @@
                     clearInterval(logInterval);
                 }
             }
+        }
+
+        function handleWebPrompt(line) {
+            const parts = line.trim().split("|");
+            if (parts.length < 3) return;
+            const type = parts[1];
+            const message = parts.slice(2).join("|");
+
+            document.getElementById('promptMessage').innerText = message;
+            const container = document.getElementById('promptControlsContainer');
+            container.innerHTML = '';
+
+            if (type === "YN") {
+                container.innerHTML = `
+                    <div class="flex gap-4">
+                        <button onclick="submitPromptAnswer('Y')" class="flex-1 bg-[#008751] hover:bg-[#006e42] text-white font-black py-4 rounded-xl uppercase tracking-widest transition-all text-lg shadow-lg">YES</button>
+                        <button onclick="submitPromptAnswer('N')" class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white font-black py-4 rounded-xl uppercase tracking-widest transition-all text-lg shadow-lg">NO</button>
+                    </div>
+                `;
+            } else if (type === "CHOICE") {
+                container.innerHTML = `
+                    <div class="flex gap-4">
+                        <button onclick="submitPromptAnswer('1')" class="flex-1 bg-zinc-700 hover:bg-[#008751] text-white font-black py-4 rounded-xl transition-all shadow-lg text-lg">1</button>
+                        <button onclick="submitPromptAnswer('2')" class="flex-1 bg-zinc-700 hover:bg-[#008751] text-white font-black py-4 rounded-xl transition-all shadow-lg text-lg">2</button>
+                        <button onclick="submitPromptAnswer('3')" class="flex-1 bg-zinc-700 hover:bg-[#008751] text-white font-black py-4 rounded-xl transition-all shadow-lg text-lg">3</button>
+                    </div>
+                `;
+            } else if (type === "ENTER") {
+                container.innerHTML = `
+                    <button onclick="submitPromptAnswer('')" class="w-full bg-[#008751] hover:bg-[#006e42] text-white font-black py-4 rounded-xl uppercase tracking-widest transition-all text-xl shadow-lg border border-[#00a865]">CONFIRM / PROCEED</button>
+                `;
+            } else { 
+                container.innerHTML = `
+                    <div class="flex flex-col gap-4">
+                        <input type="text" id="promptTextInput" class="w-full bg-zinc-900 border border-zinc-600 rounded-xl px-4 py-4 text-white text-lg focus:ring-2 focus:ring-[#008751] outline-none placeholder-gray-600 shadow-inner" placeholder="Type answer here...">
+                        <button onclick="submitPromptAnswer(document.getElementById('promptTextInput').value)" class="w-full bg-[#008751] hover:bg-[#006e42] text-white font-black py-4 rounded-xl uppercase tracking-widest transition-all shadow-lg border border-[#00a865]">Submit</button>
+                    </div>
+                `;
+                setTimeout(() => document.getElementById('promptTextInput').focus(), 100);
+            }
+
+            document.getElementById('webPromptModal').classList.remove('hidden');
+        }
+
+        async function submitPromptAnswer(ans) {
+            document.getElementById('webPromptModal').classList.add('hidden');
+            await fetch('/send_input', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: ans }) });
+            
+            const output = document.getElementById('terminalOutput');
+            const div    = document.createElement('div');
+            div.className   = "text-[#008751] font-bold py-1 bg-[#008751]/10 px-3 rounded mt-2 mb-2 border border-[#008751]/30 inline-block";
+            div.textContent = `[USER SUBMITTED: ${ans || 'ENTER'}]`;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
         }
 
         async function sendTerminalAnswer() {
