@@ -16,8 +16,8 @@ from datetime import date
 # CONFIGURATION — Edit these two values before each build
 # ================================================================
 APP_NAME = "DenierAI_Submittal_Builder"
-VERSION = "1.0.2"          # ← Increment this before each build
-RELEASE_NOTES = "Bug fixes and updated reset password functionality for admin users. Added new rep."  # ← Describe what changed
+VERSION = "1.0.3"          # ← Increment this before each build
+RELEASE_NOTES = "Update copyright attributions to Brandon Lemley and fix updater download paths."  # ← Describe what changed
 UPDATE_REPO_BASE_URL = "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates"  # ← GitHub Pages URL (no trailing slash)
 # ================================================================
 OUTPUT_DIR = Path("dist")

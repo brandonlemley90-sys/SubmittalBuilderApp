@@ -35,8 +35,8 @@ from datetime import date
 # ===================================================================
 # EDIT THESE TWO VALUES BEFORE EACH RELEASE — NOTHING ELSE NEEDED
 # ===================================================================
-VERSION = "1.0.2"          # e.g. "1.0.3" or "1.1.0"
-RELEASE_NOTES = "Bug fixes and updated reset password functionality for admin users. Added new rep."
+VERSION = "1.0.3"          # e.g. "1.0.3" or "1.1.0"
+RELEASE_NOTES = "Update copyright attributions to Brandon Lemley and fix updater download paths."
 # ===================================================================
 
 # --- Internal config — do not change these ---

@@ -1,7 +1,7 @@
 {
-  "version": "1.0.2",
-  "release_notes": "Version 1.0.2 - Bug fixes and updated reset password functionality for admin users. Added new rep.",
-  "download_url": "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/DenierAI_Submittal_Builder_v1.0.2.zip",
-  "file_hash": "",
+  "version": "1.0.3",
+  "release_notes": "Version 1.0.3 - Update copyright attributions to Brandon Lemley and fix updater download paths.",
+  "download_url": "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/DenierAI_Submittal_Builder_v1.0.3.zip",
+  "file_hash": "7017380488c56ef0bda79f00faee75f82439d723cd4db7dafb4cb9b4bf65ec4f",
   "release_date": "2026-04-08"
 }
