@@ -20,9 +20,11 @@ The app will open a local browser window automatically.
 
 ---
 
-## For Developers — Releasing a New Version
+## For Developers — Releasing & Distribution
 
-See **[RELEASE_GUIDE.md](RELEASE_GUIDE.md)** — it covers everything you need, step by step.
+See **[RELEASE_GUIDE.md](RELEASE_GUIDE.md)** for how to push updates.
+
+See **[DISTRIBUTION_AND_TESTING_GUIDE.md](DISTRIBUTION_AND_TESTING_GUIDE.md)** for how to give the app to new users and how to test for yourself.
 
 Short version:
 1. Edit `VERSION` and `RELEASE_NOTES` at the top of `release.py`
