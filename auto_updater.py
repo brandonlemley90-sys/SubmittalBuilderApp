@@ -155,7 +155,7 @@ timeout /t 2 /nobreak > nul
 xcopy /y /s /e /q "{temp_dir}\\*" "{app_dir}\\"
 rmdir /s /q "{temp_dir}"
 del "{update_package}"
-start "" "{app_dir}\\{exe_name}"
+start "" "{app_dir}\\{exe_name}" --updated
 del "%~f0"
 """
         with open(bat_path, "w") as f:

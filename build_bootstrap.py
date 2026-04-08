@@ -8,6 +8,15 @@ import subprocess
 import shutil
 from pathlib import Path
 
+# Enforce UTF-8 encoding for both building and the final console outputs
+try:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 def build_bootstrap():
     """Build bootstrap installer executable"""
     print("=" * 70)

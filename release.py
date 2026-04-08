@@ -61,15 +61,15 @@ def header(text):
 
 
 def step(text):
-    print(f"\n▶  {text}")
+    print(f"\n>  {text}")
 
 
 def ok(text):
-    print(f"   ✅ {text}")
+    print(f"   DONE: {text}")
 
 
 def fail(text):
-    print(f"   ❌ {text}")
+    print(f"   ERROR: {text}")
     sys.exit(1)
 
 
@@ -248,7 +248,7 @@ def print_git_instructions(zip_path, version_data):
     repo_url = UPDATES_REPO_URL
     abs_staging = RELEASE_STAGING.absolute()
 
-    header("🎉  BUILD COMPLETE — PUSH YOUR UPDATE")
+    header("BUILD COMPLETE — PUSH YOUR UPDATE")
 
     print(f"""
 Your release files are ready in:
@@ -311,12 +311,12 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n⚠️  Release cancelled.")
+        print("\n\n[INFO] Release cancelled.")
         sys.exit(1)
     except SystemExit:
         raise
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print(f"\n[ERROR] Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

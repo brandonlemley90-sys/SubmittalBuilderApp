@@ -169,17 +169,20 @@
 
         <div id="updateBanner" class="hidden bg-blue-900/80 border-b border-blue-500/50 px-8 py-3 flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <div class="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center border border-blue-400">
-                    <span class="text-lg">🚀</span>
+                <div id="bannerIconContainer" class="w-12 h-8 bg-blue-500/20 rounded flex items-center justify-center border border-blue-400">
+                    <span id="bannerIcon" class="text-[10px] font-bold text-white uppercase">UPG</span>
                 </div>
                 <div>
-                    <h4 class="text-white font-bold text-sm tracking-wide">Update Available: v<span id="updateVersion"></span></h4>
+                    <h4 id="bannerText" class="text-white font-bold text-sm tracking-wide">Update Available: v<span id="updateVersion"></span></h4>
                     <p id="updateNotes" class="text-blue-200 text-[10px] uppercase tracking-widest mt-0.5"></p>
                 </div>
             </div>
-            <button onclick="startUpdate()" id="updateBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-black py-2 px-6 rounded-lg text-xs uppercase tracking-[0.1em] shadow-lg border border-blue-400 transition-all">
-                Download & Restart
-            </button>
+            <div class="flex items-center gap-4">
+                <button onclick="startUpdate()" id="updateBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-black py-2 px-6 rounded-lg text-xs uppercase tracking-[0.1em] shadow-lg border border-blue-400 transition-all">
+                    Download & Restart
+                </button>
+                <button onclick="document.getElementById('updateBanner').classList.add('hidden')" class="text-white/50 hover:text-white px-2 text-xl">✕</button>
+            </div>
         </div>
 
         <div class="bg-[#008751] px-8 py-6 border-b border-zinc-700 flex items-center justify-between">
@@ -670,6 +673,84 @@
             output.scrollTop = output.scrollHeight;
         }
 
+        // --- UPDATES ---
+        async function checkUpdates() {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const isManualSuccess = urlParams.get('updated') === 'true';
+                
+                if (sessionStorage.getItem('update_success') === 'true' || isManualSuccess) {
+                    showSuccessBanner();
+                    return; 
+                }
+
+                const res = await fetch('/check_updates');
+                const data = await res.json();
+                
+                const banner = document.getElementById('updateBanner');
+                if (data.just_updated) {
+                    sessionStorage.setItem('update_success', 'true');
+                    showSuccessBanner();
+                } else if (data.available) {
+                    document.getElementById('updateVersion').innerText = data.version;
+                    document.getElementById('updateNotes').innerText = data.notes;
+                    banner.classList.remove('hidden');
+                }
+            } catch (e) {
+                console.error("Update check failed", e);
+            }
+        }
+
+        function showSuccessBanner() {
+            const banner = document.getElementById('updateBanner');
+            if (!banner) return;
+            
+            banner.classList.remove('hidden');
+            banner.style.backgroundColor = 'rgba(20, 83, 45, 0.8)';
+            banner.style.borderColor = 'rgba(34, 197, 94, 0.8)';
+            
+            const iconContainer = document.getElementById('bannerIconContainer');
+            if (iconContainer) {
+                iconContainer.style.backgroundColor = 'rgba(34, 197, 94, 0.3)';
+                iconContainer.style.borderColor = 'rgba(34, 197, 94, 0.5)';
+            }
+            
+            const icon = document.getElementById('bannerIcon');
+            if (icon) icon.innerText = "DONE";
+            
+            const text = document.getElementById('bannerText');
+            if (text) text.innerText = "Update Installed Successfully!";
+            
+            const notes = document.getElementById('updateNotes');
+            if (notes) notes.innerText = "Application is up to date.";
+
+            const btn = document.getElementById('updateBtn');
+            if (btn) btn.classList.add('hidden');
+            
+            setTimeout(() => {
+                banner.classList.add('hidden');
+                sessionStorage.removeItem('update_success');
+            }, 5000);
+        }
+
+        async function startUpdate() {
+            const btn = document.getElementById('updateBtn');
+            btn.disabled = true;
+            btn.innerText = "Starting...";
+            try {
+                const res = await fetch('/start_update', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    btn.innerText = "Downloading...";
+                    document.getElementById('bannerText').innerText = "Downloading Update...";
+                }
+            } catch (e) {
+                btn.disabled = false;
+            }
+        }
+
+        checkUpdates();
+
         // --- UTILS ---
         function showSuccess(msg) {
             document.getElementById('successText').innerText = msg;
@@ -734,6 +815,9 @@
                 alert(result.message);
             }
         });
+
+        // Check for updates on load
+        checkUpdates();
     </script>
 </body>
 </html>

@@ -9,6 +9,13 @@ import requests
 import subprocess
 from pathlib import Path
 
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+except AttributeError:
+    pass
+
+
 # ==========================================
 # CONFIGURATION 
 # ==========================================
