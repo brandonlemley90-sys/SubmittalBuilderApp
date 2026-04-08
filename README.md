@@ -76,4 +76,4 @@ If the version number there is higher than what the user has installed, a blue u
 
 ---
 
-© 2026 DenierAI. All rights reserved.
+© 2026 Brandon Lemley.

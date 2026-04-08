@@ -309,7 +309,7 @@ For issues or questions, please contact your system administrator.
 
 ---
 
-© 2026 BuildItRight Software. All rights reserved.
+© 2026 Brandon Lemley.
 '''
 
     readme_path = OUTPUT_DIR / "README.md"
