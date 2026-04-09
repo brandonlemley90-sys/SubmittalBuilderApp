@@ -13,7 +13,7 @@ from pathlib import Path
 # The actual Render URL
 SERVER_URL = "https://submittalbuilderapp.onrender.com" 
 MASTER_ADMIN_KEY = "DenierSubmittalsLemley90"
-POLL_INTERVAL = 10 # Seconds (faster for Render)
+POLL_INTERVAL = 3  # Reduced to 3s for faster browser handshake
 
 def find_result_files(folder_path):
     """Try to find the generated submittal PDF and updated Excel in the folder."""

@@ -112,6 +112,31 @@ def init_db():
 init_db()
 
 # 4. HELPERS
+def send_email(to, subject, body):
+    sender = os.environ.get('SMTP_USER', 'blemley@denier.com')
+    password = os.environ.get('SMTP_PASS')
+    if not password:
+        print("⚠️ SMTP_PASS not set. Email not sent.")
+        return False
+    
+    msg = MIMEMultipart()
+    msg['From'] = f"Denier AI <{sender}>"
+    msg['To'] = to
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+    
+    try:
+        # Outlook Config
+        server = smtplib.SMTP('smtp.office365.com', 587)
+        server.starttls()
+        server.login(sender, password)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"❌ SMTP Error: {e}")
+        return False
+
 def _sign_payload(p: str) -> str:
     return hmac.new(MASTER_ADMIN_KEY.encode(), p.encode(), hashlib.sha256).hexdigest()
 
@@ -129,7 +154,54 @@ def get_local_version():
 def inject_version():
     return dict(version=get_local_version())
 
-# 5. CORE AUTH ROUTES
+# 5. ADMIN API
+@app.route('/admin/toggle_admin', methods=['POST'])
+def toggle_admin():
+    if not session.get('is_admin'): return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+    data = request.json
+    user = User.query.filter_by(email=data.get('email')).first()
+    if not user: return jsonify({'status': 'error', 'message': 'User not found'})
+    user.is_admin = 1 if user.is_admin == 0 else 0
+    db.session.commit()
+    return jsonify({'status': 'success', 'new_state': user.is_admin})
+
+@app.route('/admin/reset_password', methods=['POST'])
+def reset_password():
+    if not session.get('is_admin'): return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+    data = request.json
+    email = data.get('email')
+    temp_pass = data.get('temp_password')
+    user = User.query.filter_by(email=email).first()
+    if not user: return jsonify({'status': 'error', 'message': 'User not found'})
+    
+    user.password = generate_password_hash(temp_pass)
+    db.session.commit()
+    
+    body = f"Hello,\n\nAn administrator has reset your password for the Denier Submittal Builder.\n\nTemporary Password: {temp_pass}\n\nPlease log in and change your password immediately.\n\nLink: https://submittalbuilderapp.onrender.com/login"
+    sent = send_email(email, "Password Reset - Denier Submittal Builder", body)
+    
+    if sent:
+        return jsonify({'status': 'success', 'message': f'Password reset and email sent to {email}'})
+    else:
+        return jsonify({'status': 'success', 'message': f'Password reset locally, but email failed to send (check logs).'})
+
+@app.route('/admin/list_users')
+def list_users():
+    if not session.get('is_admin'): return jsonify({'status': 'error'}), 403
+    users = User.query.all()
+    return jsonify({'users': [{'email': u.email, 'is_admin': bool(u.is_admin), 'name': u.name} for u in users]})
+
+@app.route('/admin/delete_user', methods=['POST'])
+def delete_user():
+    if not session.get('is_admin'): return jsonify({'status': 'error'}), 403
+    data = request.json
+    user = User.query.filter_by(email=data.get('email')).first()
+    if user:
+        db.session.delete(user)
+        db.session.commit()
+    return jsonify({'status': 'success'})
+
+# 6. CORE AUTH ROUTES
 @app.route('/')
 def home():
     if not session.get('logged_in'):
@@ -159,7 +231,12 @@ def register():
         name     = request.form.get('name', '')
         if User.query.filter_by(email=email).first():
             return render_template('registration.html', error="Email already registered.")
-        new_user = User(email=email, password=generate_password_hash(password), name=name)
+        new_user = User(
+            email=email, 
+            password=generate_password_hash(password), 
+            name=name,
+            is_admin=1 if email in SUPER_ADMINS else 0
+        )
         db.session.add(new_user)
         db.session.commit()
         return redirect(url_for('login'))
