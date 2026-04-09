@@ -7,11 +7,11 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Outfit', sans-serif; background: #0a0a0c; color: #f4f4f5; }
-        .glass { background: rgba(18, 18, 22, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
-        .gradient-text { background: linear-gradient(135deg, #00e090 0%, #008751 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        body { font-family: 'Outfit', sans-serif; background: #050507; color: #f4f4f5; }
+        .glass { background: rgba(12, 12, 14, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.15); }
+        .gradient-text { background: linear-gradient(135deg, #00ffa0 0%, #00a86b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .pulse-green { animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 224, 144, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(0, 224, 144, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 224, 144, 0); } }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 255, 160, 0.5); } 70% { box-shadow: 0 0 0 12px rgba(0, 255, 160, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 255, 160, 0); } }
         .btn-primary { background: linear-gradient(135deg, #00c87a 0%, #008751 100%); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 135, 81, 0.3); filter: brightness(1.1); }
         .file-zone { transition: all 0.3s ease; }
@@ -112,23 +112,31 @@
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="file-zone relative border-2 border-dashed border-white/5 rounded-[2rem] p-10 text-center group cursor-pointer hover:border-[#00e090]/40 transition-all sm:col-span-2">
+                        <div class="file-zone relative border-2 border-dashed border-white/10 rounded-[2rem] p-10 text-center group cursor-pointer hover:border-[#00ffa0]/50 transition-all sm:col-span-2">
                             <input type="file" id="excelFile" accept=".xlsx,.xlsm" class="absolute inset-0 opacity-0 cursor-pointer" onchange="updateFileName(this, 'excelLabel')">
                             <div class="space-y-4">
-                                <div class="text-[#00e090] opacity-30 group-hover:opacity-100 transition-opacity">
+                                <div class="text-[#00ffa0] opacity-50 group-hover:opacity-100 transition-opacity">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a2 2 0 00-2-2H5a2 2 0 00-2 2v2a2 2 0 022 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                                 </div>
-                                <p id="excelLabel" class="text-xs font-black uppercase tracking-widest text-zinc-500 group-hover:text-white transition-colors">Submittal Builder (Excel).xlsm</p>
+                                <p id="excelLabel" class="text-xs font-black uppercase tracking-widest text-zinc-400 group-hover:text-white transition-colors">Submittal Builder (Excel).xlsm</p>
                             </div>
                         </div>
                         
-                        <div class="file-zone border-2 border-dashed border-white/5 rounded-[1.5rem] py-6 px-4 text-center relative group hover:border-[#00e090]/40 transition-all">
+                        <div class="file-zone border-2 border-dashed border-white/10 rounded-[1.5rem] py-6 px-4 text-center relative group hover:border-[#00ffa0]/50 transition-all">
                             <input type="file" id="specsFile" accept=".pdf" class="absolute inset-0 opacity-0 cursor-pointer" onchange="updateFileName(this, 'specsLabel')">
-                            <p id="specsLabel" class="text-[10px] font-black uppercase tracking-widest text-zinc-600 group-hover:text-white truncate">Electrical Specs.pdf</p>
+                            <p id="specsLabel" class="text-[10px] font-black uppercase tracking-widest text-[#00ffa0] group-hover:text-white truncate">Electrical Specs.pdf</p>
                         </div>
-                        <div class="file-zone border-2 border-dashed border-white/5 rounded-[1.5rem] py-6 px-4 text-center relative group hover:border-[#00e090]/40 transition-all">
+                        <div class="file-zone border-2 border-dashed border-white/10 rounded-[1.5rem] py-6 px-4 text-center relative group hover:border-[#00ffa0]/50 transition-all">
                             <input type="file" id="dwgsFile" accept=".pdf" class="absolute inset-0 opacity-0 cursor-pointer" onchange="updateFileName(this, 'dwgsLabel')">
-                            <p id="dwgsLabel" class="text-[10px] font-black uppercase tracking-widest text-zinc-600 group-hover:text-white truncate">Drawings.pdf</p>
+                            <p id="dwgsLabel" class="text-[10px] font-black uppercase tracking-widest text-[#00ffa0] group-hover:text-white truncate">Drawings.pdf</p>
+                        </div>
+                        <div class="file-zone border-2 border-dashed border-white/10 rounded-[1.5rem] py-6 px-4 text-center relative group hover:border-[#00ffa0]/50 transition-all">
+                            <input type="file" id="formFile" accept=".pdf" class="absolute inset-0 opacity-0 cursor-pointer" onchange="updateFileName(this, 'formLabel')">
+                            <p id="formLabel" class="text-[10px] font-black uppercase tracking-widest text-[#00ffa0] group-hover:text-white truncate">Job Setup Form.pdf</p>
+                        </div>
+                        <div class="file-zone border-2 border-dashed border-white/10 rounded-[1.5rem] py-6 px-4 text-center relative group hover:border-[#00ffa0]/50 transition-all">
+                            <input type="file" id="contractFile" accept=".pdf" class="absolute inset-0 opacity-0 cursor-pointer" onchange="updateFileName(this, 'contractLabel')">
+                            <p id="contractLabel" class="text-[10px] font-black uppercase tracking-widest text-[#00ffa0] group-hover:text-white truncate">Contract / PO.pdf</p>
                         </div>
                     </div>
 
