@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Denier Submittal Builder</title>
+    <meta name="description" content="Denier Electric AI-powered Submittal Builder Agent – upload project files and generate cutsheets automatically.">
+    <!-- Use stable Tailwind to avoid console warnings -->
+    <script src="https://cdn.tailwindcss.com/3.4.1"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              denier: '#008751',
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Montserrat', sans-serif; }
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #008751; border-radius: 10px; }
+
+        /* Drop Zone States */
+        .drop-zone { transition: all .2s ease; cursor: pointer; }
+        .drop-zone:hover, .drop-zone.dragover { border-color: #008751 !important; background: rgba(0,135,81,0.08) !important; }
+        .drop-zone.has-file { border-color: #00c87a !important; background: rgba(0,200,122,0.06) !important; }
+        .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+
+        /* Glow Pulse for Upload Progress */
+        @keyframes glow-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(0,135,81,0.4);} 50%{box-shadow:0 0 0 8px rgba(0,135,81,0);} }
+        .glow-pulse { animation: glow-pulse 1.5s infinite; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin { animation: spin 1s linear infinite; }
+    </style>
+</head>
+<body class="bg-zinc-900 text-gray-200 antialiased min-h-screen flex flex-col items-center justify-center p-4 md:p-6 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]">
+
+<!-- ═══════════════════════════════════════════════════════════
+     PIN MODAL
+═══════════════════════════════════════════════════════════ -->
+<div id="pinModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl p-8 w-full max-w-sm shadow-2xl">
+        <h3 class="text-xl font-black text-white uppercase tracking-tight text-center mb-2">Secure Your Vault</h3>
+        <p class="text-sm text-gray-400 text-center mb-6">Set a 4-digit PIN to protect your API key.</p>
+        <input type="password" id="modalPinInput" maxlength="4" pattern="\d*" inputmode="numeric"
+               class="w-full bg-zinc-900 border border-zinc-600 rounded-xl px-4 py-4 text-center text-3xl font-black text-white tracking-[1em] focus:outline-none focus:ring-2 focus:ring-[#008751] mb-6"
+               placeholder="****">
+        <div class="flex gap-3">
+            <button type="button" onclick="closePinModal()" class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white font-bold py-3 rounded-lg uppercase text-xs transition-all">Cancel</button>
+            <button type="button" onclick="confirmVaultSave()" class="flex-1 bg-[#008751] hover:bg-[#006e42] text-white font-black py-3 rounded-lg uppercase text-xs shadow-lg border border-[#00a865] transition-all">Save Key</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     ACCOUNT MODAL
+═══════════════════════════════════════════════════════════ -->
+<div id="accountModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+        <div class="bg-zinc-900 px-8 py-5 border-b border-zinc-700 flex justify-between items-center">
+            <h3 class="text-xl font-black text-white uppercase tracking-tight">Account Settings</h3>
+            <button onclick="closeAccountModal()" class="text-zinc-500 hover:text-white transition-colors text-xl">✕</button>
+        </div>
+
+        <div class="flex border-b border-zinc-700 bg-zinc-800/50 px-8">
+            <button id="tabBtn-profile"  onclick="switchAccountTab('profile')"  class="py-3 px-4 border-b-2 border-[#008751] text-[#008751] font-bold text-sm uppercase tracking-wide transition-all">Profile</button>
+            <button id="tabBtn-security" onclick="switchAccountTab('security')" class="py-3 px-4 border-b-2 border-transparent text-gray-400 hover:text-white font-bold text-sm uppercase tracking-wide transition-all">Security</button>
+            <button id="tabBtn-reset"    onclick="switchAccountTab('reset')"    class="py-3 px-4 border-b-2 border-transparent text-gray-400 hover:text-white font-bold text-sm uppercase tracking-wide transition-all">Apply Reset</button>
+        </div>
+
+        <div id="tabContent-profile" class="p-8 space-y-5">
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Full Name</label>
+                <input type="text" id="profile_name" value="{{ user_name }}"
+                       class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-[#008751] outline-none" placeholder="Your Name">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Email Address</label>
+                <input type="text" value="{{ user_email }}" disabled
+                       class="w-full bg-zinc-900/50 border border-zinc-700 rounded-lg px-4 py-3 text-gray-500 cursor-not-allowed">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Account Role</label>
+                <div class="flex items-center justify-between">
+                    <div class="inline-block px-3 py-1 rounded bg-[#008751]/20 border border-[#008751]/50 text-[#008751] text-xs font-bold uppercase tracking-widest">
+                        {% if is_admin %}Administrator{% else %}Standard User{% endif %}
+                    </div>
+                    {% if not is_admin %}
+                    <button type="button" onclick="claimAdmin()" class="text-[10px] text-zinc-500 hover:text-[#008751] uppercase font-bold transition-colors tracking-widest">Claim Admin</button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="pt-4 border-t border-zinc-700">
+                <button type="button" onclick="submitProfileUpdate()" class="w-full bg-[#008751] hover:bg-[#006e42] text-white font-black py-3 rounded-lg uppercase text-xs tracking-widest shadow-lg border border-[#00a865] transition-all">Save Profile</button>
+            </div>
+        </div>
+
+        <div id="tabContent-security" class="hidden p-8 space-y-5">
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Current Password</label>
+                <input type="password" id="old_pw" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-[#008751] outline-none" placeholder="••••••••">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">New Password</label>
+                <input type="password" id="new_pw" class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-[#008751] outline-none" placeholder="••••••••">
+            </div>
+            <div class="pt-4 border-t border-zinc-700">
+                <button type="button" onclick="submitPasswordChange()" class="w-full bg-zinc-700 hover:bg-zinc-600 text-white font-black py-3 rounded-lg uppercase text-xs tracking-widest shadow-lg border border-zinc-500 transition-all">Update Password</button>
+            </div>
+        </div>
+
+        <div id="tabContent-reset" class="hidden p-8 space-y-5">
+            <div class="bg-zinc-900/60 rounded-lg border border-zinc-700 p-4">
+                <p class="text-xs text-gray-400 leading-relaxed">If your admin sent you a <span class="text-[#008751] font-bold">.denierreset</span> file, upload it here to restore access.</p>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Reset File</label>
+                <input type="file" id="resetFileInput" accept=".denierreset"
+                       class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white text-sm focus:ring-2 focus:ring-[#008751] outline-none file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-bold file:bg-[#008751] file:text-white hover:file:bg-[#006e42] file:cursor-pointer">
+            </div>
+            <p id="applyResetStatus" class="text-xs font-bold hidden"></p>
+            <div class="pt-4 border-t border-zinc-700">
+                <button type="button" onclick="applyResetFile()" class="w-full bg-zinc-700 hover:bg-zinc-600 text-white font-black py-3 rounded-lg uppercase text-xs tracking-widest shadow-lg border border-zinc-500 transition-all">Apply Password Reset</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     ADMIN MODAL
+═══════════════════════════════════════════════════════════ -->
+<div id="adminModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="bg-zinc-800 border-2 border-red-900 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div class="bg-zinc-900 px-8 py-5 border-b border-red-900/50 flex justify-between items-center flex-shrink-0">
+            <div>
+                <h3 class="text-xl font-black text-white uppercase tracking-tight">Admin Control Panel</h3>
+                <p class="text-[10px] text-red-400 font-bold uppercase tracking-widest mt-0.5">Authorized Access Only</p>
+            </div>
+            <button onclick="document.getElementById('adminModal').classList.add('hidden')" class="text-zinc-500 hover:text-white transition-colors text-xl">✕</button>
+        </div>
+
+        <!-- Admin Tabs -->
+        <div class="flex border-b border-red-900/30 bg-zinc-800/50 px-8 flex-shrink-0">
+            <button id="adminTab-reset"   onclick="switchAdminTab('reset')"   class="py-3 px-4 border-b-2 border-red-500 text-red-400 font-bold text-xs uppercase tracking-wide transition-all">Password Reset</button>
+            <button id="adminTab-users"   onclick="switchAdminTab('users')"   class="py-3 px-4 border-b-2 border-transparent text-gray-400 hover:text-white font-bold text-xs uppercase tracking-wide transition-all">User Management</button>
+        </div>
+
+        <div class="overflow-y-auto scrollbar-thin">
+            <!-- Tab: Password Reset -->
+            <div id="adminTabContent-reset" class="p-8 space-y-5">
+                <div class="bg-zinc-900/60 rounded-lg border border-red-900/40 p-4">
+                    <p class="text-xs text-gray-400 leading-relaxed">
+                        Enter the locked-out user's email and a temporary password. The app will update their password <span class="text-red-300 font-bold">immediately</span> and send them an email with login instructions.
+                    </p>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Locked-Out User Email</label>
+                    <input type="email" id="admin_target_email"
+                           class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white text-sm focus:ring-2 focus:ring-red-700 outline-none"
+                           placeholder="user@example.com">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Temporary Password</label>
+                    <input type="text" id="admin_new_pw"
+                           class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white text-sm font-mono focus:ring-2 focus:ring-red-700 outline-none"
+                           placeholder="e.g. TempPass2026!">
+                </div>
+                <button type="button" onclick="sendResetEmail()"
+                        class="w-full bg-red-900/50 hover:bg-red-800 text-white text-xs font-black uppercase py-3 rounded-lg border border-red-700 transition-all tracking-widest">
+                    📧 Reset Password &amp; Send Email
+                </button>
+                <p id="resetEmailStatus" class="text-[11px] font-bold hidden text-center px-3 py-2 rounded-lg"></p>
+            </div>
+
+            <!-- Tab: User Management -->
+            <div id="adminTabContent-users" class="hidden p-8 space-y-4">
+                <button onclick="loadAdminUsers()" class="text-[10px] font-bold text-zinc-400 hover:text-[#008751] uppercase tracking-widest transition-colors mb-2">↻ Refresh Users</button>
+                <div id="adminUserList" class="space-y-2">
+                    <p class="text-xs text-zinc-500 italic">Loading users...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SUCCESS MODAL
+═══════════════════════════════════════════════════════════ -->
+<div id="successModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="bg-zinc-800 border-2 border-[#008751] rounded-2xl p-8 w-full max-w-sm shadow-2xl text-center">
+        <div class="w-16 h-16 bg-[#008751]/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#008751]">
+            <span class="text-2xl">✅</span>
+        </div>
+        <h3 class="text-xl font-black text-white uppercase tracking-tight mb-2">Done!</h3>
+        <p id="successText" class="text-sm text-gray-400 mb-6">Action completed successfully.</p>
+        <button type="button" id="successCloseBtn" onclick="closeSuccessModal()"
+                class="w-full bg-[#008751] hover:bg-[#006e42] text-white font-black py-3 rounded-lg uppercase text-xs tracking-widest border border-[#00a865]">
+            Got it &nbsp;↵
+        </button>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     JOB LOGS MODAL
+═══════════════════════════════════════════════════════════ -->
+<div id="logsModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+    <div class="bg-zinc-900 border-2 border-[#008751] rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+        <div class="bg-[#008751] px-6 py-4 flex items-center justify-between">
+            <h3 class="text-xs font-black text-white uppercase tracking-[0.2em]">Job Logs</h3>
+            <button onclick="document.getElementById('logsModal').classList.add('hidden')" class="text-white/70 hover:text-white text-sm font-bold border border-white/20 px-3 py-1 rounded">Close</button>
+        </div>
+        <div id="logsContent" class="flex-1 overflow-y-auto p-6 font-mono text-xs text-green-400 leading-relaxed bg-black/80 scrollbar-thin whitespace-pre-wrap"></div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MAIN APP CARD
+═══════════════════════════════════════════════════════════ -->
+<div class="max-w-4xl w-full bg-zinc-800 rounded-2xl shadow-2xl overflow-hidden border border-zinc-700">
+
+    <!-- HEADER -->
+    <div class="bg-[#008751] px-8 py-6 flex items-center justify-between">
+        <div class="flex items-center gap-6">
+            <img src="/static/Denier logo.png" class="h-12 w-auto" alt="Denier Logo">
+            <div class="border-l border-white/30 pl-6">
+                <h1 class="text-lg font-black text-white tracking-tight leading-none">Submittal Builder <span class="text-green-200">Agent</span></h1>
+                <p class="text-[10px] text-green-100 uppercase tracking-[0.2em] mt-1">Industrial Intelligence Platform · v{{ version }}</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if is_admin %}
+            <button type="button" onclick="openAdminModal()"
+                    class="text-[10px] font-black uppercase text-red-200 border border-red-900/50 px-3 py-2 rounded-lg hover:bg-red-900/20 transition-all">
+                ⚙ Admin
+            </button>
+            {% endif %}
+            <button type="button" onclick="openAccountModal()"
+                    class="text-[10px] font-black uppercase text-white/70 hover:text-white border border-white/30 px-3 py-2 rounded-lg hover:bg-white/10 transition-all flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                </svg>
+                {% if user_name %}{{ user_name }}{% else %}Account{% endif %}
+                {% if is_admin %}<span class="bg-green-400 text-green-900 px-1.5 py-0.5 rounded text-[8px] tracking-widest ml-1">ADMIN</span>{% endif %}
+            </button>
+            <a href="/logout" class="text-[10px] font-black uppercase text-white/70 hover:text-white border border-white/30 px-3 py-2 rounded-lg hover:bg-white/10 transition-all">Logout</a>
+        </div>
+    </div>
+
+    <div class="p-8 space-y-8">
+
+        <!-- ── API KEY VAULT ── -->
+        <div class="bg-zinc-900/50 p-6 rounded-xl border border-zinc-700 shadow-inner">
+            <label class="block text-sm font-bold text-gray-300 mb-3 uppercase tracking-wide">Gemini API Key Vault</label>
+            <div class="flex flex-col md:flex-row gap-3">
+                <input type="password" id="api_key"
+                       class="flex-1 bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-[#008751] transition-all outline-none"
+                       placeholder="Enter your Gemini API Key or Unlock from vault →">
+                <div class="flex gap-2">
+                    <input type="text" id="pin_entry" maxlength="4" inputmode="numeric"
+                           class="w-20 bg-zinc-800 border border-zinc-600 rounded-lg px-2 text-center text-white font-bold focus:ring-2 focus:ring-[#008751] outline-none"
+                           placeholder="PIN">
+                    <button type="button" onclick="unlockVault()"
+                            class="bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] font-black uppercase px-4 rounded-lg border border-zinc-600 transition-all shadow-md">
+                        Unlock
+                    </button>
+                    <button type="button" onclick="openPinModal()"
+                            class="bg-[#008751]/20 hover:bg-[#008751]/40 text-[#008751] text-[10px] font-black uppercase px-4 rounded-lg border border-[#008751]/40 transition-all shadow-md">
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── WORKER LAUNCH PANEL ── -->
+        <div id="workerLaunchPanel" class="rounded-2xl p-5 shadow-xl border transition-all"
+             style="background:rgba(0,0,0,0.3); border-color: #3f3f46">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+
+                <!-- Status + instructions -->
+                <div class="flex items-center gap-3 flex-1">
+                    <div class="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xl flex-shrink-0">🖥️</div>
+                    <div>
+                        <p class="text-xs font-black text-white uppercase tracking-widest">Local Windows Worker</p>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <span id="workerDot2" class="w-2 h-2 rounded-full bg-zinc-500 animate-pulse flex-shrink-0"></span>
+                            <span id="workerTxt2" class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Checking…</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action buttons -->
+                <div class="flex flex-wrap gap-2 flex-shrink-0">
+                    <a href="/download_worker"
+                       class="inline-flex items-center gap-1.5 bg-[#008751]/20 hover:bg-[#008751]/40 text-[#008751] border border-[#008751]/40 font-black px-4 py-2 rounded-xl uppercase text-[10px] tracking-widest transition-all shadow-md">
+                        ⬇️ Worker Launcher
+                    </a>
+                    <a href="/download_worker_silent"
+                       class="inline-flex items-center gap-1.5 bg-blue-900/20 hover:bg-blue-900/40 text-blue-400 border border-blue-900/40 font-black px-4 py-2 rounded-xl uppercase text-[10px] tracking-widest transition-all shadow-md">
+                        🕵️ Silent Launcher
+                    </a>
+                    <button onclick="showWorkerHelp()"
+                            class="inline-flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 border border-zinc-600 font-black px-4 py-2 rounded-xl uppercase text-[10px] tracking-widest transition-all">
+                        ❓ How to Start
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Worker Help Modal -->
+        <div id="workerHelpModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-zinc-900 border border-zinc-700 rounded-2xl p-8 max-w-lg w-full shadow-2xl">
+                <h3 class="text-base font-black text-white uppercase tracking-widest mb-4">🖥️ How to Start the Worker</h3>
+                <ol class="space-y-3 text-sm text-zinc-300">
+                    <li class="flex gap-3">
+                        <span class="w-6 h-6 bg-[#008751]/20 rounded-lg flex items-center justify-center text-[#008751] font-black text-xs flex-shrink-0">1</span>
+                        <span>Download <strong class="text-white">Worker Launcher</strong> (visible) or <strong class="text-white text-blue-400">Silent Launcher</strong> (invisible).</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="w-6 h-6 bg-[#008751]/20 rounded-lg flex items-center justify-center text-[#008751] font-black text-xs flex-shrink-0">2</span>
+                        <span>Save the file next to <code class="text-[#008751] bg-zinc-800 px-1 rounded">worker.py</code> and double-click it.</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="w-6 h-6 bg-[#008751]/20 rounded-lg flex items-center justify-center text-[#008751] font-black text-xs flex-shrink-0">3</span>
+                        <span>Wait 30s. The status badge will turn <span class="text-green-400 font-bold font-mono">● GREEN</span>.</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="w-6 h-6 bg-red-900/20 rounded-lg flex items-center justify-center text-red-500 font-black text-xs flex-shrink-0">!</span>
+                        <span><strong>To Stop Silent Mode:</strong> Open <strong class="text-white">Task Manager</strong> and end the "<strong class="text-white">Python</strong>" or "<strong class="text-white">pythonw.exe</strong>" task.</span>
+                    </li>
+                </ol>
+                <p class="text-[10px] text-zinc-500 mt-4 uppercase tracking-widest font-bold">⚠️ Microsoft Excel and xlwings must be installed on the worker PC for macros to run.</p>
+                <button onclick="document.getElementById('workerHelpModal').classList.add('hidden')"
+                        class="mt-6 w-full bg-zinc-700 hover:bg-zinc-600 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-all text-xs">
+                    Close
+                </button>
+            </div>
+        </div>
+
+        <!-- ── START NEW BUILD ── -->
+        <div class="bg-[#008751]/5 border border-[#008751]/20 rounded-2xl p-8 shadow-xl space-y-5">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-black text-white uppercase tracking-widest">Start New Build</h2>
+                <span class="text-[10px] text-zinc-500 uppercase tracking-widest font-bold hidden md:block">Files upload to server → worker processes on Windows</span>
+            </div>
+
+            <!-- Project Name + Output Folder (side-by-side on md+) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <!-- Project Name -->
+                <div class="flex flex-col">
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Project Name</label>
+                    <div class="h-[36px] flex items-end mb-2">
+                        <p class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest">Used as the job title in the queue</p>
+                    </div>
+                    <input type="text" id="project_name"
+                           class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3.5 text-white focus:ring-2 focus:ring-[#008751] outline-none placeholder-zinc-600 transition-all text-sm"
+                           placeholder="e.g. Acme Corp – Electrical Submittal">
+                </div>
+
+                <!-- Output Folder Path -->
+                <div class="flex flex-col">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-widest mb-1">
+                        Output Folder <span class="text-red-400">*</span>
+                    </label>
+                    <div class="h-[36px] flex items-end mb-2">
+                        <div class="flex items-center gap-2">
+                            <span id="workerStatusDot" class="flex-shrink-0 w-2 h-2 rounded-full bg-zinc-600 animate-pulse"></span>
+                            <span id="workerStatusText" class="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Checking worker…</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <div class="relative flex-1">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none">📁</span>
+                            <input type="text" id="output_folder"
+                                   class="w-full bg-zinc-900 border border-zinc-700 rounded-xl pl-9 pr-3 py-3.5 text-white focus:ring-2 focus:ring-[#008751] outline-none placeholder-zinc-600 font-mono text-xs transition-all"
+                                   placeholder="C:\Projects\Smith Building\Submittals">
+                        </div>
+                        <button type="button" id="browseFolderBtn" onclick="browseOutputFolder()"
+                                class="bg-zinc-700 hover:bg-zinc-600 text-white font-black px-4 rounded-xl uppercase text-[10px] tracking-widest border border-zinc-600 transition-all shadow-md whitespace-nowrap flex items-center gap-1.5 flex-shrink-0">
+                            📂 Browse
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Excel Workbook (full width) -->
+            <div>
+                <label class="block text-xs font-bold text-gray-300 uppercase tracking-widest mb-1">
+                    Excel Workbook (.xlsm / .xlsx) <span class="text-red-400">* Required</span>
+                </label>
+                <div id="zone-excel" class="drop-zone relative border-2 border-dashed border-zinc-600 rounded-xl flex flex-col items-center justify-center gap-1.5 h-[96px]">
+                    <input type="file" id="excel" name="excel" accept=".xlsm,.xlsx,.xls">
+                    <span class="text-2xl pointer-events-none">📊</span>
+                    <p class="text-sm font-bold text-white pointer-events-none" id="excel-label">Drop Excel workbook here or click to browse</p>
+                    <p class="text-[10px] text-zinc-500 pointer-events-none"><span class="text-[#008751]">.xlsm preferred</span> for macro support</p>
+                </div>
+            </div>
+
+            <!-- 2-col File Upload Grid -->
+            <div class="grid grid-cols-2 gap-4">
+
+                <!-- Specifications PDF -->
+                <div class="flex flex-col">
+                    <div class="min-h-[36px] mb-1">
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest">Specifications PDF</label>
+                        <p class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest mt-0.5">Optional · .pdf / .doc</p>
+                    </div>
+                    <div id="zone-specs" class="drop-zone relative border-2 border-dashed border-zinc-600 rounded-xl flex flex-col items-center justify-center gap-1.5 h-[110px]">
+                        <input type="file" id="specs" name="specs" accept=".pdf,.doc,.docx">
+                        <span class="text-2xl pointer-events-none">📄</span>
+                        <p class="text-xs font-bold text-white pointer-events-none" id="specs-label">Drop Specs here</p>
+                        <p class="text-[9px] text-zinc-500 pointer-events-none">or click to browse</p>
+                    </div>
+                </div>
+
+                <!-- Drawings / Plans -->
+                <div class="flex flex-col">
+                    <div class="min-h-[36px] mb-1">
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest">Drawings / Plans</label>
+                        <p class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest mt-0.5">Optional · .pdf / .dwg</p>
+                    </div>
+                    <div id="zone-drawings" class="drop-zone relative border-2 border-dashed border-zinc-600 rounded-xl flex flex-col items-center justify-center gap-1.5 h-[110px]">
+                        <input type="file" id="drawings" name="drawings" accept=".pdf,.dwg">
+                        <span class="text-2xl pointer-events-none">📐</span>
+                        <p class="text-xs font-bold text-white pointer-events-none" id="drawings-label">Drop Drawings here</p>
+                        <p class="text-[9px] text-zinc-500 pointer-events-none">or click to browse</p>
+                    </div>
+                </div>
+
+                <!-- Job Setup Form -->
+                <div class="flex flex-col">
+                    <div class="min-h-[36px] mb-1">
+                        <label class="block text-xs font-bold text-gray-300 uppercase tracking-widest">Job Setup Form <span class="text-red-400">*</span></label>
+                        <p class="text-[9px] text-[#008751] font-bold uppercase tracking-widest mt-0.5">Populates the Approval Sheet</p>
+                    </div>
+                    <div id="zone-form" class="drop-zone relative border-2 border-dashed border-zinc-500 rounded-xl flex flex-col items-center justify-center gap-1.5 h-[110px]">
+                        <input type="file" id="form" name="form" accept=".pdf,.xlsx,.xlsm,.csv,.doc,.docx">
+                        <span class="text-2xl pointer-events-none">📋</span>
+                        <p class="text-xs font-bold text-white pointer-events-none" id="form-label">Drop Job Setup Form here</p>
+                        <p class="text-[9px] text-zinc-500 pointer-events-none">.pdf / .xlsx / .csv / .doc</p>
+                    </div>
+                </div>
+
+                <!-- Contract Document -->
+                <div class="flex flex-col">
+                    <div class="min-h-[36px] mb-1">
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest">Contract Document</label>
+                        <p class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest mt-0.5">Optional · .pdf / .doc</p>
+                    </div>
+                    <div id="zone-contract" class="drop-zone relative border-2 border-dashed border-zinc-600 rounded-xl flex flex-col items-center justify-center gap-1.5 h-[110px]">
+                        <input type="file" id="contract" name="contract" accept=".pdf,.doc,.docx">
+                        <span class="text-2xl pointer-events-none">📃</span>
+                        <p class="text-xs font-bold text-white pointer-events-none" id="contract-label">Drop Contract here</p>
+                        <p class="text-[9px] text-zinc-500 pointer-events-none">or click to browse</p>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Upload Progress Bar (hidden until submit) -->
+            <div id="uploadProgress" class="hidden">
+                <div class="flex justify-between text-xs font-bold text-gray-400 uppercase mb-2">
+                    <span>Uploading files to server...</span>
+                    <span id="uploadPct">0%</span>
+                </div>
+                <div class="w-full bg-zinc-700 rounded-full h-2 overflow-hidden">
+                    <div id="uploadBar" class="bg-[#008751] h-2 rounded-full transition-all duration-300 glow-pulse" style="width:0%"></div>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="button" id="submitBtn" onclick="submitBuild()"
+                    class="w-full bg-[#008751] hover:bg-[#006e42] text-white font-black uppercase tracking-[0.2em] py-5 rounded-xl shadow-lg border-2 border-[#00a865] transition-all transform active:scale-[0.98] flex items-center justify-center gap-3">
+                <span id="submitBtnIcon">🚀</span>
+                <span id="submitBtnText">Upload Files &amp; Submit Build Job</span>
+            </button>
+        </div>
+
+
+
+        <!-- ── JOB HISTORY ── -->
+        <div class="space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-xs font-black text-gray-400 uppercase tracking-[0.3em]">Job History &amp; Status</h3>
+                <div class="flex items-center gap-3">
+                    <button onclick="clearAllJobs()" class="text-[10px] font-black text-red-500 hover:text-red-300 uppercase transition-colors border border-red-900/30 px-3 py-1.5 rounded-lg hover:bg-red-900/20">🗑 Clear All</button>
+                    <button onclick="refreshJobs()" class="text-[10px] font-bold text-zinc-500 hover:text-[#008751] uppercase transition-colors">↻ Refresh</button>
+                </div>
+            </div>
+            <div class="bg-zinc-900 rounded-xl border border-zinc-700 overflow-hidden shadow-2xl">
+                <table class="w-full text-left text-sm border-collapse">
+                    <thead class="bg-zinc-800/80 text-gray-500 text-[10px] font-black uppercase tracking-widest border-b border-zinc-700">
+                        <tr>
+                            <th class="p-4">Job</th>
+                            <th class="p-4">Project</th>
+                            <th class="p-4">Status</th>
+                            <th class="p-4">Time</th>
+                            <th class="p-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobListBody" class="divide-y divide-zinc-800">
+                        <tr><td colspan="5" class="p-8 text-center text-zinc-600 text-xs uppercase font-bold tracking-widest">Loading jobs...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-[10px] text-zinc-600 text-center uppercase tracking-widest font-bold">
+                Auto-refreshes every 10 seconds. Jobs are processed by your local Windows worker.
+            </p>
+        </div>
+
+    </div><!-- /p-8 -->
+</div><!-- /card -->
+
+<footer class="mt-6 text-zinc-600 text-[10px] uppercase font-bold tracking-widest opacity-50">
+    © 2026 Brandon Lemley · Denier Electric
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════════════════════════ -->
+<script>
+// ─── KEYBOARD SHORTCUTS ───────────────────────────────────────────
+window.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+        if (!document.getElementById('successModal').classList.contains('hidden')) {
+            e.preventDefault(); closeSuccessModal();
+        }
+    }
+    if (e.key === 'Escape') {
+        closeAccountModal();
+        document.getElementById('adminModal').classList.add('hidden');
+        document.getElementById('logsModal').classList.add('hidden');
+    }
+});
+document.getElementById('pin_entry').addEventListener('keydown',     e => { if(e.key==='Enter'){e.preventDefault();unlockVault();} });
+document.getElementById('modalPinInput').addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault();confirmVaultSave();} });
+
+// ─── DRAG & DROP ZONES ───────────────────────────────────────────────
+const dropZones = [
+    { zoneId:'zone-excel',    inputId:'excel',    labelId:'excel-label',    defaultText:'Drop Excel workbook here' },
+    { zoneId:'zone-specs',    inputId:'specs',    labelId:'specs-label',    defaultText:'Drop Specs here'          },
+    { zoneId:'zone-drawings', inputId:'drawings', labelId:'drawings-label', defaultText:'Drop Drawings here'       },
+    { zoneId:'zone-form',     inputId:'form',     labelId:'form-label',     defaultText:'Drop Form here'           },
+    { zoneId:'zone-contract', inputId:'contract', labelId:'contract-label', defaultText:'Drop Contract here'       },
+];
+
+dropZones.forEach(({ zoneId, inputId, labelId, defaultText }) => {
+    const zone  = document.getElementById(zoneId);
+    const input = document.getElementById(inputId);
+    const label = document.getElementById(labelId);
+
+    zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', e => { e.preventDefault(); zone.classList.remove('dragover'); });
+    zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+            // Assign to hidden file input
+            const dt = new DataTransfer();
+            dt.items.add(files[0]);
+            input.files = dt.files;
+            setFileLabel(zone, label, files[0].name);
+        }
+    });
+
+    input.addEventListener('change', () => {
+        if (input.files && input.files.length > 0) {
+            setFileLabel(zone, label, input.files[0].name);
+        } else {
+            clearFileLabel(zone, label, defaultText);
+        }
+    });
+});
+
+function setFileLabel(zone, label, filename) {
+    zone.classList.add('has-file');
+    zone.classList.remove('dragover');
+    label.textContent = '✓ ' + filename;
+    label.classList.add('text-[#00e090]');
+    label.classList.remove('text-white');
+}
+
+function clearFileLabel(zone, label, defaultText) {
+    zone.classList.remove('has-file', 'dragover');
+    label.textContent = defaultText;
+    label.classList.remove('text-[#00e090]');
+    label.classList.add('text-white');
+}
+
+// ─── PIN / VAULT ───────────────────────────────────────────────────
+function openPinModal() {
+    const key = document.getElementById('api_key').value;
+    if (!key) {
+        document.getElementById('api_key').classList.add('border-red-500','ring-2','ring-red-500');
+        setTimeout(() => document.getElementById('api_key').classList.remove('border-red-500','ring-2','ring-red-500'), 2000);
+        return;
+    }
+    document.getElementById('pinModal').classList.remove('hidden');
+    document.getElementById('modalPinInput').value = '';
+    document.getElementById('modalPinInput').focus();
+}
+function closePinModal() { document.getElementById('pinModal').classList.add('hidden'); }
+
+async function confirmVaultSave() {
+    const key = document.getElementById('api_key').value;
+    const pin = document.getElementById('modalPinInput').value;
+    if (!pin || pin.length < 4) {
+        document.getElementById('modalPinInput').classList.add('border-red-500');
+        setTimeout(() => document.getElementById('modalPinInput').classList.remove('border-red-500'), 2000);
+        return;
+    }
+    await fetch('/save_api_vault', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({api_key:key, pin}) });
+    closePinModal();
+    showSuccess('API Key saved to vault.');
+}
+
+async function unlockVault() {
+    const pin = document.getElementById('pin_entry').value;
+    const res  = await fetch('/unlock_api_vault', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pin}) });
+    const data = await res.json();
+    if (data.status === 'success') {
+        document.getElementById('api_key').value = data.api_key;
+        document.getElementById('pin_entry').value = '';
+        document.getElementById('api_key').classList.add('ring-2','ring-[#008751]');
+        setTimeout(() => document.getElementById('api_key').classList.remove('ring-2','ring-[#008751]'), 1200);
+    } else {
+        document.getElementById('pin_entry').classList.add('border-red-500','ring-2','ring-red-500');
+        setTimeout(() => document.getElementById('pin_entry').classList.remove('border-red-500','ring-2','ring-red-500'), 2000);
+    }
+}
+
+// ─── ACCOUNT MODAL ──────────────────────────────────────────────────
+function openAccountModal()  { document.getElementById('accountModal').classList.remove('hidden'); }
+function closeAccountModal() { document.getElementById('accountModal').classList.add('hidden'); }
+
+function switchAccountTab(tab) {
+    ['profile','security','reset'].forEach(t => {
+        document.getElementById('tabBtn-'+t).className = 'py-3 px-4 border-b-2 border-transparent text-gray-400 hover:text-white font-bold text-sm uppercase tracking-wide transition-all';
+        document.getElementById('tabContent-'+t).classList.add('hidden');
+    });
+    document.getElementById('tabBtn-'+tab).className = 'py-3 px-4 border-b-2 border-[#008751] text-[#008751] font-bold text-sm uppercase tracking-wide transition-all';
+    document.getElementById('tabContent-'+tab).classList.remove('hidden');
+}
+
+async function submitProfileUpdate() {
+    const name = document.getElementById('profile_name').value;
+    await fetch('/update_profile', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name}) });
+    closeAccountModal();
+    showSuccess('Profile updated!');
+    setTimeout(() => window.location.reload(), 1200);
+}
+
+async function submitPasswordChange() {
+    const old_pw = document.getElementById('old_pw').value;
+    const new_pw = document.getElementById('new_pw').value;
+    if (!old_pw || !new_pw) { alert('Both password fields are required.'); return; }
+    const res  = await fetch('/change_password', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({old_password:old_pw, new_password:new_pw}) });
+    const data = await res.json();
+    if (data.status === 'success') { closeAccountModal(); showSuccess('Password updated successfully!'); }
+    else alert('Current password incorrect.');
+}
+
+async function applyResetFile() {
+    const fileInput = document.getElementById('resetFileInput');
+    const statusEl  = document.getElementById('applyResetStatus');
+    if (!fileInput.files.length) {
+        statusEl.textContent = '⚠️ Select a .denierreset file first.';
+        statusEl.className   = 'text-xs font-bold text-yellow-400 block';
+        return;
+    }
+    let token;
+    try { token = JSON.parse(await fileInput.files[0].text()); }
+    catch { statusEl.textContent = '❌ Invalid file.'; statusEl.className = 'text-xs font-bold text-red-400 block'; return; }
+    statusEl.textContent = 'Applying…'; statusEl.className = 'text-xs font-bold text-gray-400 block';
+    const res  = await fetch('/apply_reset', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token}) });
+    const data = await res.json();
+    if (data.status === 'success') {
+        statusEl.textContent = '✅ ' + data.message; statusEl.className = 'text-xs font-bold text-green-400 block';
+        fileInput.value = '';
+        setTimeout(() => window.location.href = '/logout', 3000);
+    } else {
+        statusEl.textContent = '❌ ' + (data.message || 'Reset failed.'); statusEl.className = 'text-xs font-bold text-red-400 block';
+    }
+}
+
+async function claimAdmin() {
+    const key = prompt('Enter the Master Admin Key:');
+    if (!key) return;
+    const res  = await fetch('/admin/promote_self', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({secret_key:key}) });
+    const data = await res.json();
+    if (data.status === 'success') { alert('You are now an Administrator!'); window.location.reload(); }
+    else alert('Invalid key.');
+}
+
+// ─── ADMIN MODAL ────────────────────────────────────────────────────
+function openAdminModal() {
+    document.getElementById('adminModal').classList.remove('hidden');
+    loadAdminUsers();
+}
+
+function switchAdminTab(tab) {
+    ['reset','users'].forEach(t => {
+        document.getElementById('adminTab-'+t).className = 'py-3 px-4 border-b-2 border-transparent text-gray-400 hover:text-white font-bold text-xs uppercase tracking-wide transition-all';
+        document.getElementById('adminTabContent-'+t).classList.add('hidden');
+    });
+    document.getElementById('adminTab-'+tab).className = 'py-3 px-4 border-b-2 border-red-500 text-red-400 font-bold text-xs uppercase tracking-wide transition-all';
+    document.getElementById('adminTabContent-'+tab).classList.remove('hidden');
+}
+
+async function sendResetEmail() {
+    const email   = document.getElementById('admin_target_email').value.trim();
+    const temp_pw = document.getElementById('admin_new_pw').value.trim();
+    const statusEl = document.getElementById('resetEmailStatus');
+    if (!email || !temp_pw) {
+        statusEl.textContent = '⚠️ Both fields are required.';
+        statusEl.className   = 'text-[11px] font-bold text-yellow-400 block px-3 py-2 rounded-lg bg-yellow-900/20';
+        return;
+    }
+    statusEl.textContent = 'Sending…';
+    statusEl.className   = 'text-[11px] font-bold text-blue-400 block px-3 py-2 rounded-lg bg-blue-900/20';
+    const res  = await fetch('/admin/send_reset_email', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({email, temp_password: temp_pw})
+    });
+    const data = await res.json();
+    if (data.status === 'success' || data.status === 'warning') {
+        statusEl.textContent = (data.status === 'success' ? '✅ ' : '⚠️ ') + data.message;
+        statusEl.className   = `text-[11px] font-bold block px-3 py-2 rounded-lg ${data.status === 'success' ? 'text-green-400 bg-green-900/20' : 'text-yellow-400 bg-yellow-900/20'}`;
+        document.getElementById('admin_target_email').value = '';
+        document.getElementById('admin_new_pw').value = '';
+    } else {
+        statusEl.textContent = '❌ ' + (data.message || 'Failed.');
+        statusEl.className   = 'text-[11px] font-bold text-red-400 block px-3 py-2 rounded-lg bg-red-900/20';
+    }
+}
+
+async function loadAdminUsers() {
+    const container = document.getElementById('adminUserList');
+    container.innerHTML = '<p class="text-xs text-zinc-500 italic">Loading…</p>';
+    try {
+        const res  = await fetch('/admin/list_users');
+        const data = await res.json();
+        if (!data.users || !data.users.length) {
+            container.innerHTML = '<p class="text-xs text-zinc-500">No users found.</p>';
+            return;
+        }
+        container.innerHTML = data.users.map(u => `
+            <div class="flex items-center justify-between bg-zinc-900/60 border border-zinc-700 rounded-lg px-4 py-3">
+                <div>
+                    <p class="text-xs font-bold text-white">${u.email}</p>
+                    <p class="text-[10px] text-zinc-500">${u.name || '—'} &nbsp;·&nbsp; <span class="${u.is_admin ? 'text-green-400' : 'text-zinc-500'}">${u.is_admin ? 'Admin' : 'User'}</span></p>
+                </div>
+                ${!u.is_admin ? `<button onclick="deleteUser('${u.email}')" class="text-[9px] font-black uppercase text-red-500 hover:text-red-300 border border-red-900/40 px-3 py-1.5 rounded-lg transition-all hover:bg-red-900/20">Delete</button>` : '<span class="text-[9px] text-zinc-600 uppercase">Protected</span>'}
+            </div>
+        `).join('');
+    } catch {
+        container.innerHTML = '<p class="text-xs text-red-400">Failed to load users.</p>';
+    }
+}
+
+async function deleteUser(email) {
+    if (!confirm(`Delete account for ${email}? This cannot be undone.`)) return;
+    const res  = await fetch('/admin/delete_user', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email}) });
+    const data = await res.json();
+    if (data.status === 'success') { showSuccess(`${email} removed.`); loadAdminUsers(); }
+    else alert(data.message || 'Delete failed.');
+}
+
+// ─── BUILD SUBMIT ───────────────────────────────────────────────────
+async function submitBuild() {
+    const apiKey       = document.getElementById('api_key').value.trim();
+    const projectName  = document.getElementById('project_name').value.trim() || 'Untitled Project';
+    const outputFolder = document.getElementById('output_folder').value.trim();
+    const excelFile    = document.getElementById('excel').files[0];
+    const formFile     = document.getElementById('form').files[0];
+
+    if (!apiKey) {
+        document.getElementById('api_key').classList.add('ring-2','ring-red-500','border-red-500');
+        setTimeout(() => document.getElementById('api_key').classList.remove('ring-2','ring-red-500','border-red-500'), 2500);
+        showSuccess('⚠️ Please enter your Gemini API Key first.');
+        return;
+    }
+    if (!excelFile) {
+        document.getElementById('zone-excel').classList.add('!border-red-500','!bg-red-900/10');
+        setTimeout(() => document.getElementById('zone-excel').classList.remove('!border-red-500','!bg-red-900/10'), 2500);
+        showSuccess('⚠️ Excel workbook (.xlsm) is required.');
+        return;
+    }
+    if (!formFile) {
+        document.getElementById('zone-form').classList.add('!border-red-500','!bg-red-900/10');
+        setTimeout(() => document.getElementById('zone-form').classList.remove('!border-red-500','!bg-red-900/10'), 2500);
+        showSuccess('⚠️ Job Setup Form is required (used to populate the Approval Sheet).');
+        return;
+    }
+    if (!outputFolder) {
+        document.getElementById('output_folder').classList.add('ring-2','ring-red-500','border-red-500');
+        setTimeout(() => document.getElementById('output_folder').classList.remove('ring-2','ring-red-500','border-red-500'), 2500);
+        showSuccess('⚠️ Output Folder Path is required so the worker knows where to save submittals.');
+        return;
+    }
+
+    // Build FormData
+    const fd = new FormData();
+    fd.append('api_key',       apiKey);
+    fd.append('project_name',  projectName);
+    fd.append('output_folder', outputFolder);
+    fd.append('excel',         excelFile);
+    ['specs','drawings','form','contract'].forEach(id => {
+        const f = document.getElementById(id).files[0];
+        if (f) fd.append(id, f);
+    });
+
+
+    // Update UI for upload state
+    const btn     = document.getElementById('submitBtn');
+    const btnIcon = document.getElementById('submitBtnIcon');
+    const btnText = document.getElementById('submitBtnText');
+    btn.disabled  = true;
+    btn.classList.add('opacity-70','cursor-not-allowed');
+    btnIcon.textContent = '⏳';
+    btnText.textContent = 'Uploading files…';
+    document.getElementById('uploadProgress').classList.remove('hidden');
+
+    // Use XMLHttpRequest for upload progress
+    return new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload_and_submit');
+
+        xhr.upload.onprogress = e => {
+            if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                document.getElementById('uploadBar').style.width = pct + '%';
+                document.getElementById('uploadPct').textContent  = pct + '%';
+            }
+        };
+
+        xhr.onload = () => {
+            const data = JSON.parse(xhr.responseText);
+            document.getElementById('uploadProgress').classList.add('hidden');
+            btn.disabled = false;
+            btn.classList.remove('opacity-70','cursor-not-allowed');
+            btnIcon.textContent = '🚀';
+            btnText.textContent = 'Upload Files & Submit Build Job';
+
+            if (data.status === 'success') {
+                showSuccess(`✅ ${data.message}`);
+                // Clear file inputs
+                dropZones.forEach(({inputId, zoneId, labelId, defaultText}) => {
+                    document.getElementById(inputId).value = '';
+                    clearFileLabel(document.getElementById(zoneId), document.getElementById(labelId), defaultText);
+                });
+                document.getElementById('project_name').value  = '';
+                document.getElementById('output_folder').value = '';
+                refreshJobs();
+            } else {
+                showSuccess('❌ ' + (data.message || 'Upload failed.'));
+            }
+            resolve();
+        };
+
+        xhr.onerror = () => {
+            document.getElementById('uploadProgress').classList.add('hidden');
+            btn.disabled = false;
+            btn.classList.remove('opacity-70','cursor-not-allowed');
+            btnIcon.textContent = '🚀';
+            btnText.textContent = 'Upload Files & Submit Build Job';
+            showSuccess('❌ Network error uploading files. Check your connection.');
+            resolve();
+        };
+
+        xhr.send(fd);
+    });
+}
+
+// ─── JOB LIST ───────────────────────────────────────────────────────
+async function refreshJobs() {
+    const res  = await fetch('/get_jobs');
+    const data = await res.json();
+    const body = document.getElementById('jobListBody');
+    if (!data.jobs || !data.jobs.length) {
+        body.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-zinc-600 text-xs uppercase font-bold tracking-widest">No jobs yet. Submit a build above.</td></tr>';
+        return;
+    }
+    body.innerHTML = '';
+    data.jobs.forEach(job => {
+        const statusColors = { completed:'text-green-400 font-bold', processing:'text-blue-400 animate-pulse', failed:'text-red-400 font-bold', pending:'text-yellow-400' };
+        const sc = statusColors[job.status] || 'text-gray-400';
+        const timeStr = job.time ? new Date(job.time).toLocaleString() : '—';
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-zinc-800/30 transition-colors';
+        tr.innerHTML = `
+            <td class="p-4 font-mono text-zinc-500 text-xs">#${job.id}</td>
+            <td class="p-4 text-xs font-medium text-zinc-200 max-w-[160px] truncate" title="${job.project_name}">${job.project_name}</td>
+            <td class="p-4 text-[10px] uppercase tracking-widest ${sc}">${job.status}</td>
+            <td class="p-4 text-[10px] text-zinc-500">${timeStr}</td>
+            <td class="p-4 text-right space-x-1.5 whitespace-nowrap">
+                ${job.logs ? `<button onclick="viewLogs(${job.id},'${encodeURIComponent(job.logs)}')" class="inline-block bg-zinc-700/50 text-zinc-400 px-2.5 py-1 rounded text-[9px] font-bold uppercase border border-zinc-600/30 hover:bg-zinc-600 hover:text-white transition-all cursor-pointer">Logs</button>` : ''}
+                ${job.logs ? `<button onclick="clearJobLog(${job.id}, this)" class="inline-block bg-red-900/20 text-red-500 px-2.5 py-1 rounded text-[9px] font-bold uppercase border border-red-900/30 hover:bg-red-900/40 transition-all cursor-pointer">🗑</button>` : ''}
+                ${job.status === 'completed' && job.pdf   ? `<a href="/download/${job.pdf}"   class="inline-block bg-[#008751]/20 text-[#008751] px-2.5 py-1 rounded text-[9px] font-bold uppercase border border-[#008751]/30 hover:bg-[#008751] hover:text-white transition-all">PDF</a>` : ''}
+                ${job.status === 'completed' && job.excel ? `<a href="/download/${job.excel}" class="inline-block bg-blue-900/20 text-blue-400 px-2.5 py-1 rounded text-[9px] font-bold uppercase border border-blue-900/30 hover:bg-blue-600 hover:text-white transition-all">Excel</a>` : ''}
+            </td>
+        `;
+        body.appendChild(tr);
+    });
+}
+
+function viewLogs(jobId, encodedLogs) {
+    document.getElementById('logsContent').textContent = decodeURIComponent(encodedLogs) || 'No logs recorded.';
+    document.getElementById('logsModal').classList.remove('hidden');
+}
+
+// Auto-refresh every 10 seconds
+setInterval(refreshJobs, 10000);
+refreshJobs();
+
+// ─── SUCCESS MODAL ──────────────────────────────────────────────────
+function showSuccess(msg) {
+    document.getElementById('successText').innerText = msg;
+    document.getElementById('successModal').classList.remove('hidden');
+    document.getElementById('successCloseBtn').focus();
+}
+function closeSuccessModal() { document.getElementById('successModal').classList.add('hidden'); }
+
+// ─── CLEAR JOB LOG ─────────────────────────────────────────────────────
+async function clearJobLog(jobId, btn) {
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+        await fetch('/api/clear_job_log', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({job_id: jobId})
+        });
+        btn.closest('tr').querySelector('button[onclick*="viewLogs"]')?.remove();
+        btn.remove();
+        refreshJobs();
+    } catch {
+        btn.disabled = false;
+        btn.textContent = '🗑';
+    }
+}
+
+async function clearAllJobs() {
+    if (!confirm('Delete all job history? This cannot be undone.')) return;
+    await fetch('/api/clear_all_jobs', { method: 'POST' });
+    refreshJobs();
+}
+
+// ─── WORKER STATUS BADGE ──────────────────────────────────────────────
+let workerIsOnline = false;
+
+async function checkWorkerStatus() {
+    try {
+        const res  = await fetch('/api/worker_status');
+        const data = await res.json();
+        workerIsOnline = data.online === true;
+
+        // ── Badge in output folder row ──
+        const dot = document.getElementById('workerStatusDot');
+        const txt = document.getElementById('workerStatusText');
+        // ── Badge in launch panel ──
+        const dot2 = document.getElementById('workerDot2');
+        const txt2 = document.getElementById('workerTxt2');
+        const panel = document.getElementById('workerLaunchPanel');
+        const btn  = document.getElementById('browseFolderBtn');
+
+        if (workerIsOnline) {
+            const cls = 'w-2 h-2 rounded-full bg-green-400';
+            if (dot) { dot.className = cls; txt.textContent = 'Worker Online'; txt.className = 'text-green-400'; }
+            if (dot2) { dot2.className = cls; txt2.textContent = 'Worker Online — Ready'; txt2.className = 'text-green-400'; }
+            if (panel) panel.style.borderColor = '#008751';
+            if (btn) btn.title = '';
+        } else {
+            const ago = data.seconds_ago != null ? `Last seen ${data.seconds_ago}s ago` : 'Never connected';
+            const cls = 'w-2 h-2 rounded-full bg-red-500';
+            if (dot) { dot.className = cls; txt.textContent = `Worker Offline — ${ago}`; txt.className = 'text-red-400'; }
+            if (dot2) { dot2.className = cls; txt2.textContent = `Offline — ${ago}`; txt2.className = 'text-red-400'; }
+            if (panel) panel.style.borderColor = '#7f1d1d';
+            if (btn) btn.title = 'Worker is offline. Start worker.py on your Windows PC.';
+        }
+    } catch {
+        const el = document.getElementById('workerStatusText');
+        if (el) el.textContent = 'Status check failed';
+    }
+}
+
+function showWorkerHelp() {
+    document.getElementById('workerHelpModal').classList.remove('hidden');
+}
+
+// Check on load and then every 30 s
+checkWorkerStatus();
+setInterval(checkWorkerStatus, 30000);
+
+// ─── REMOTE BROWSE: OUTPUT FOLDER ────────────────────────────────────
+async function browseOutputFolder() {
+    if (!workerIsOnline) {
+        showSuccess(
+            '⚠️ Worker is currently Offline.\n\n' +
+            'Start worker.py on your Windows PC first, then click Browse.\n\n' +
+            'You can also type the path directly into the field.'
+        );
+        return;
+    }
+
+    const btn = document.getElementById('browseFolderBtn');
+    btn.innerHTML = '⏳ Waiting…';
+    btn.disabled  = true;
+    btn.classList.add('animate-pulse', 'bg-blue-900/40', 'border-blue-700');
+    btn.classList.remove('bg-zinc-700', 'hover:bg-zinc-600', 'border-zinc-600');
+
+    try {
+        await fetch('/api/request_browse_output', { method: 'POST' });
+    } catch {
+        resetBrowseBtn(btn);
+        showSuccess('❌ Could not contact server. Are you online?');
+        return;
+    }
+
+    const timeoutMs = 120000;  // 2-minute wait max
+    const started   = Date.now();
+
+    const poll = setInterval(async () => {
+        if (Date.now() - started > timeoutMs) {
+            clearInterval(poll);
+            resetBrowseBtn(btn);
+            showSuccess('⏱️ Browse timed out.\nMake sure worker.py is running and connected, then try again.');
+            return;
+        }
+        try {
+            const res  = await fetch('/api/poll_browse_output');
+            const data = await res.json();
+            if (data.status === 'completed') {
+                clearInterval(poll);
+                resetBrowseBtn(btn);
+                if (data.path && data.path !== 'CANCELLED') {
+                    document.getElementById('output_folder').value = data.path;
+                    document.getElementById('output_folder').classList.add('ring-2', 'ring-[#008751]');
+                    setTimeout(() =>
+                        document.getElementById('output_folder').classList.remove('ring-2', 'ring-[#008751]'),
+                        1500
+                    );
+                }
+            }
+        } catch { /* keep polling on network blip */ }
+    }, 2000);
+}
+
+function resetBrowseBtn(btn) {
+    btn.innerHTML = '📂 Browse';
+    btn.disabled  = false;
+    btn.classList.remove('animate-pulse', 'bg-blue-900/40', 'border-blue-700');
+    btn.classList.add('bg-zinc-700', 'hover:bg-zinc-600', 'border-zinc-600');
+}
+</script>
+</body>
+</html>

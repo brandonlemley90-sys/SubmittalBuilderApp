@@ -56,26 +56,29 @@ def scan_project_folder(folder_path):
     if not os.path.exists(folder_path):
         return config
 
-    files = os.listdir(folder_path)
-    for f in files:
-        f_lower = f.lower()
-        # Excel Index
-        if f_lower.endswith(('.xlsm', '.xlsx')) and not f.startswith('~$'):
-            # Prioritize 'Index' or 'Master' but take any excel if empty
-            if 'index' in f_lower or 'master' in f_lower or not config["EXCEL_WORKBOOK_NAME"]:
-                config["EXCEL_WORKBOOK_NAME"] = f
-        
-        # PDFs
-        if f_lower.endswith('.pdf'):
-            # Job Form (XX-XX-XXXX pattern)
-            if re.match(r'\d{2}-\d{2}-\d{4}', f):
-                config["JOB_FORM_PDF_NAME"] = f
-            elif 'spec' in f_lower:
-                config["SPEC_PDF_NAME"] = f
-            elif 'drawing' in f_lower or 'plan' in f_lower:
-                config["DRAWINGS_PDF_NAME"] = f
-            elif 'contract' in f_lower:
-                config["CONTRACT_PDF_NAME"] = f
+    try:
+        files = os.listdir(folder_path)
+        for f in files:
+            f_lower = f.lower()
+            # Excel Index
+            if f_lower.endswith(('.xlsm', '.xlsx')) and not f.startswith('~$'):
+                # Prioritize 'Index' or 'Master' but take any excel if empty
+                if 'index' in f_lower or 'master' in f_lower or not config["EXCEL_WORKBOOK_NAME"]:
+                    config["EXCEL_WORKBOOK_NAME"] = f
+            
+            # PDFs
+            if f_lower.endswith('.pdf'):
+                # Job Form (XX-XX-XXXX pattern)
+                if re.match(r'\d{2}-\d{2}-\d{4}', f):
+                    config["JOB_FORM_PDF_NAME"] = f
+                elif 'spec' in f_lower:
+                    config["SPEC_PDF_NAME"] = f
+                elif 'drawing' in f_lower or 'plan' in f_lower:
+                    config["DRAWINGS_PDF_NAME"] = f
+                elif 'contract' in f_lower:
+                    config["CONTRACT_PDF_NAME"] = f
+    except Exception as e:
+        print(f"   ⚠️ Error scanning folder: {e}")
                 
     return config
 
@@ -105,52 +108,11 @@ def get_user_setup():
         print("🛑 Operation cancelled by user (No folder selected).")
         sys.exit(0)
 
-    print("📊 Please select the Excel Workbook...")
-    excel_path = filedialog.askopenfilename(
-        initialdir=project_folder,
-        title="Select Excel Workbook",
-        filetypes=[("Excel Files", "*.xlsm;*.xlsx")]
-    )
-
-    print("📝 Please select the Job Setup Form PDF...")
-    job_form_path = filedialog.askopenfilename(
-        initialdir=project_folder,
-        title="Select Job Setup Form PDF",
-        filetypes=[("PDF Files", "*.pdf")]
-    )
-
-    print("📄 Please select the Specs PDF...")
-    spec_path = filedialog.askopenfilename(
-        initialdir=project_folder,
-        title="Select Specs PDF",
-        filetypes=[("PDF Files", "*.pdf")]
-    )
-
-    print("📐 Please select the Drawings PDF...")
-    drawings_path = filedialog.askopenfilename(
-        initialdir=project_folder,
-        title="Select Drawings PDF",
-        filetypes=[("PDF Files", "*.pdf")]
-    )
-
-    print("🤝 Please select the Contract PDF...")
-    contract_path = filedialog.askopenfilename(
-        initialdir=project_folder,
-        title="Select Contract PDF",
-        filetypes=[("PDF Files", "*.pdf")]
-    )
+    # Auto-detect within folder
+    project_config = scan_project_folder(project_folder)
 
     # Destroy the hidden root window now that all pop-ups are done
     root.destroy()
-
-    project_config = {
-        "PROJECT_FOLDER": os.path.normpath(project_folder),
-        "EXCEL_WORKBOOK_NAME": os.path.basename(excel_path) if excel_path else "",
-        "JOB_FORM_PDF_NAME": os.path.basename(job_form_path) if job_form_path else "",
-        "SPEC_PDF_NAME": os.path.basename(spec_path) if spec_path else "",
-        "DRAWINGS_PDF_NAME": os.path.basename(drawings_path) if drawings_path else "",
-        "CONTRACT_PDF_NAME": os.path.basename(contract_path) if contract_path else ""
-    }
 
     return api_key.strip(), project_config
 
@@ -233,7 +195,7 @@ def run_pipeline(master_api_key, project_config):
 
         if not os.path.exists(script):
             print(f"❌ Error: Could not find '{script}' in the current directory.")
-            break
+            continue
 
         try:
             # The Meta Agent freezes on this line until the child script finishes
@@ -242,12 +204,12 @@ def run_pipeline(master_api_key, project_config):
                 env=env_vars,
                 check=True
             )
-            print(f"\n✅ [{script}] -> Successfully Built and Opened in Bluebeam.")
+            print(f"\n✅ [{script}] -> Successfully Built.")
 
             # If there are more scripts left, explicitly pause the pipeline
             if i < len(scripts) - 1:
                 print("\n⏸️  PIPELINE PAUSED.")
-                web_prompt("ENTER", "Review your document in Bluebeam. Press 'CONFIRM / PROCEED' when ready to start the next submittal.")
+                web_prompt("ENTER", "Review your document. Press 'CONFIRM / PROCEED' when ready to start the next submittal.")
 
         except subprocess.CalledProcessError as e:
             print(f"\n❌ [{script}] -> FAILED.")

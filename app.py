@@ -73,6 +73,17 @@ def enqueue_output(out, q):
     out.close()
 
 # --- 3. ROUTES ---
+def get_local_version():
+    try:
+        with open(resource_path('version.json'), 'r') as f:
+            return json.load(f).get('version', 'unknown')
+    except:
+        return 'unknown'
+
+@app.context_processor
+def inject_version():
+    return dict(version=get_local_version())
+
 @app.route('/get_logs')
 def get_logs():
     logs = []
@@ -127,6 +138,142 @@ def register():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/reset')
+def reset_page():
+    return render_template('reset.html')
+
+@app.route('/update_profile', methods=['POST'])
+def update_profile():
+    if not session.get('logged_in'): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    name = request.json.get('name')
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("UPDATE users SET name = ? WHERE email = ?", (name, session['user_email']))
+    return jsonify({"status": "success"})
+
+@app.route('/change_password', methods=['POST'])
+def change_password():
+    if not session.get('logged_in'): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    old_pw = request.json.get('old_password')
+    new_pw = request.json.get('new_password')
+    with sqlite3.connect(DB_PATH) as conn:
+        user = conn.execute("SELECT password FROM users WHERE email = ?", (session['user_email'],)).fetchone()
+        if user and check_password_hash(user[0], old_pw):
+            conn.execute("UPDATE users SET password = ? WHERE email = ?", (generate_password_hash(new_pw), session['user_email']))
+            return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Incorrect password"}), 400
+
+@app.route('/admin/generate_reset_token', methods=['POST'])
+def generate_reset_token():
+    if not session.get('is_admin'): return jsonify({"status": "error", "message": "Admin only"}), 403
+    email = request.json.get('email')
+    new_password = request.json.get('new_password')
+    expires = int(time.time()) + (72 * 3600)  # 72 hours
+    
+    payload = f"{email}|{new_password}|{expires}"
+    sig = _sign_payload(payload)
+    
+    token = {
+        "email": email,
+        "new_password": new_password,
+        "expires": expires,
+        "sig": sig
+    }
+    
+    filename = f"reset_{email.split('@')[0]}.denierreset"
+    return jsonify({"status": "success", "token": token, "filename": filename})
+
+@app.route('/apply_reset', methods=['POST'])
+def apply_reset():
+    data = request.json
+    token = data.get('token')
+    if not token: return jsonify({"status": "error", "message": "No token provided"}), 400
+    
+    email = token.get('email')
+    new_pw = token.get('new_password')
+    expires = token.get('expires')
+    sig = token.get('sig')
+    
+    # Re-verify signature
+    payload = f"{email}|{new_pw}|{expires}"
+    if _sign_payload(payload) != sig:
+        return jsonify({"status": "error", "message": "Invalid token signature"}), 400
+        
+    if time.time() > expires:
+        return jsonify({"status": "error", "message": "Token expired"}), 400
+        
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("UPDATE users SET password = ? WHERE email = ?", (generate_password_hash(new_pw), email))
+    
+    return jsonify({"status": "success", "message": "Password reset successful. Please login with your temporary password."})
+
+@app.route('/reset')
+def reset_page():
+    return render_template('reset.html')
+
+@app.route('/update_profile', methods=['POST'])
+def update_profile():
+    if not session.get('logged_in'): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    name = request.json.get('name')
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("UPDATE users SET name = ? WHERE email = ?", (name, session['user_email']))
+    return jsonify({"status": "success"})
+
+@app.route('/change_password', methods=['POST'])
+def change_password():
+    if not session.get('logged_in'): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    old_pw = request.json.get('old_password')
+    new_pw = request.json.get('new_password')
+    with sqlite3.connect(DB_PATH) as conn:
+        user = conn.execute("SELECT password FROM users WHERE email = ?", (session['user_email'],)).fetchone()
+        if user and check_password_hash(user[0], old_pw):
+            conn.execute("UPDATE users SET password = ? WHERE email = ?", (generate_password_hash(new_pw), session['user_email']))
+            return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Incorrect password"}), 400
+
+@app.route('/admin/generate_reset_token', methods=['POST'])
+def generate_reset_token():
+    if not session.get('is_admin'): return jsonify({"status": "error", "message": "Admin only"}), 403
+    email = request.json.get('email')
+    new_password = request.json.get('new_password')
+    expires = int(time.time()) + (72 * 3600)  # 72 hours
+    
+    payload = f"{email}|{new_password}|{expires}"
+    sig = _sign_payload(payload)
+    
+    token = {
+        "email": email,
+        "new_password": new_password,
+        "expires": expires,
+        "sig": sig
+    }
+    
+    filename = f"reset_{email.split('@')[0]}.denierreset"
+    return jsonify({"status": "success", "token": token, "filename": filename})
+
+@app.route('/apply_reset', methods=['POST'])
+def apply_reset():
+    data = request.json
+    token = data.get('token')
+    if not token: return jsonify({"status": "error", "message": "No token provided"}), 400
+    
+    email = token.get('email')
+    new_pw = token.get('new_password')
+    expires = token.get('expires')
+    sig = token.get('sig')
+    
+    # Re-verify signature
+    payload = f"{email}|{new_pw}|{expires}"
+    if _sign_payload(payload) != sig:
+        return jsonify({"status": "error", "message": "Invalid token signature"}), 400
+        
+    if time.time() > expires:
+        return jsonify({"status": "error", "message": "Token expired"}), 400
+        
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("UPDATE users SET password = ? WHERE email = ?", (generate_password_hash(new_pw), email))
+    
+    return jsonify({"status": "success", "message": "Password reset successful. Please login with your temporary password."})
 
 # --- 4. AUTO-UPDATER ---
 updater = AutoUpdater()
