@@ -24,15 +24,26 @@ from werkzeug.utils import secure_filename
 # 1. PATHS & CONFIG
 # Render mount point for persistent files
 if os.environ.get('RENDER'):
+    # Try the standard mount point, but have a local fallback if permissions fail
     BASE_DATA_DIR = "/data"
+    try:
+        if not os.path.exists(BASE_DATA_DIR):
+            os.makedirs(BASE_DATA_DIR, exist_ok=True)
+    except PermissionError:
+        print("⚠️ Warning: Permission denied on /data. Falling back to local ./data")
+        BASE_DATA_DIR = os.path.join(os.getcwd(), 'data')
 else:
     # Local fallback
     BASE_DATA_DIR = os.path.join(os.getenv('LOCALAPPDATA', os.path.expanduser('~')), 'DenierAI')
 
 UPLOAD_DIR  = os.path.join(BASE_DATA_DIR, 'uploads')
 RESULTS_DIR = os.path.join(BASE_DATA_DIR, 'results')
-for _d in [UPLOAD_DIR, RESULTS_DIR]:
-    os.makedirs(_d, exist_ok=True)
+
+for _d in [BASE_DATA_DIR, UPLOAD_DIR, RESULTS_DIR]:
+    try:
+        os.makedirs(_d, exist_ok=True)
+    except Exception as e:
+        print(f"⚠️ Could not create directory {_d}: {e}")
 
 MASTER_ADMIN_KEY = "DenierSubmittalsLemley90"
 SUPER_ADMINS     = ['blemley@denier.com', 'brandonlemley90@gmail.com']
