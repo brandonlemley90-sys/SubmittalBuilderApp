@@ -1,137 +1,157 @@
-import sys
 """
-Submittal Builder Meta Agent - v1.0.4
+Submittal Builder Meta Agent - v2.1.0
+Render Edition – SQLAlchemy/PostgreSQL Integration
 """
 import os
-import sqlite3
-import subprocess
-import webbrowser
-import threading
-import queue
+import sys
+import io
+import uuid
 import json
 import hmac
 import hashlib
 import time
-from datetime import timedelta
-from threading import Timer
-from tkinter import filedialog
-import tkinter as tk
+import zipfile
+import smtplib
+from datetime import datetime, timedelta
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, send_file
+from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from auto_updater import AutoUpdater
+from werkzeug.utils import secure_filename
 
-# --- 1. DATABASE & GLOBALS ---
-if os.name == 'nt':
-    app_data_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'DenierAI')
+# 1. PATHS & CONFIG
+# Render mount point for persistent files
+if os.environ.get('RENDER'):
+    BASE_DATA_DIR = "/data"
 else:
-    app_data_dir = os.path.expanduser('~/.denierai')
+    # Local fallback
+    BASE_DATA_DIR = os.path.join(os.getenv('LOCALAPPDATA', os.path.expanduser('~')), 'DenierAI')
 
-if not os.path.exists(app_data_dir):
-    os.makedirs(app_data_dir)
+UPLOAD_DIR  = os.path.join(BASE_DATA_DIR, 'uploads')
+RESULTS_DIR = os.path.join(BASE_DATA_DIR, 'results')
+for _d in [UPLOAD_DIR, RESULTS_DIR]:
+    os.makedirs(_d, exist_ok=True)
 
-DB_PATH = os.path.join(app_data_dir, 'users.db')
+MASTER_ADMIN_KEY = "DenierSubmittalsLemley90"
+SUPER_ADMINS     = ['blemley@denier.com', 'brandonlemley90@gmail.com']
 
-active_process = None
-output_queue = queue.Queue()
+# 2. FLASK & DATABASE
+app = Flask(__name__)
+app.secret_key = "denier_vault_production_2026"
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
 
-# Cached update info
-_cached_update_info = None
-JUST_UPDATED = False
-START_TIME = time.time()
+# Postgres on Render via DATABASE_URL, fallback to SQLite
+db_url = os.environ.get('DATABASE_URL')
+if db_url and db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url or f"sqlite:///{os.path.join(BASE_DATA_DIR, 'submittal_builder.db')}"
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+# 3. MODELS
+class User(db.Model):
+    __tablename__ = 'users'
+    email    = db.Column(db.String(120), primary_key=True)
+    password = db.Column(db.String(255), nullable=False)
+    api_key  = db.Column(db.String(255))
+    pin      = db.Column(db.String(10))
+    is_admin = db.Column(db.Integer, default=0)
+    name     = db.Column(db.String(100), default="")
+
+class Job(db.Model):
+    __tablename__ = 'jobs'
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_email    = db.Column(db.String(120))
+    upload_path   = db.Column(db.String(255))
+    api_key       = db.Column(db.String(255))
+    status        = db.Column(db.String(50), default="pending")
+    result_pdf    = db.Column(db.String(255))
+    result_excel  = db.Column(db.String(255))
+    logs          = db.Column(db.Text, default="")
+    project_name  = db.Column(db.String(255), default="")
+    output_folder = db.Column(db.String(255), default="")
+    timestamp     = db.Column(db.DateTime, default=datetime.utcnow)
+
+class BrowseRequest(db.Model):
+    __tablename__ = 'browse_requests'
+    email   = db.Column(db.String(120), primary_key=True)
+    status  = db.Column(db.String(50), default="pending")
+    path    = db.Column(db.String(500))
+    created = db.Column(db.DateTime, default=datetime.utcnow)
+
+class WorkerPing(db.Model):
+    __tablename__ = 'worker_ping'
+    id        = db.Column(db.Integer, primary_key=True)
+    last_ping = db.Column(db.DateTime)
 
 def init_db():
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute('CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, password TEXT, api_key TEXT, pin TEXT)')
-        for migration in [
-            "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
-            "ALTER TABLE users ADD COLUMN name TEXT DEFAULT ''",
-        ]:
-            try: cursor.execute(migration)
-            except: pass
-        conn.commit()
+    with app.app_context():
+        db.create_all()
+        # Guarantee super-admins
+        for email in SUPER_ADMINS:
+            admin = User.query.filter_by(email=email).first()
+            if admin:
+                admin.is_admin = 1
+        db.session.commit()
 
 init_db()
 
-def resource_path(relative_path):
-    try: base_path = sys._MEIPASS
-    except: base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+# 4. HELPERS
+def _sign_payload(p: str) -> str:
+    return hmac.new(MASTER_ADMIN_KEY.encode(), p.encode(), hashlib.sha256).hexdigest()
 
-# --- 2. FLASK CONFIG ---
-app = Flask(__name__, template_folder=resource_path('templates'), static_folder=resource_path('static'))
-app.secret_key = "denier_vault_production_2026"
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
-MASTER_ADMIN_KEY = "DenierSubmittalsLemley90"
+def _check_worker_auth() -> bool:
+    return request.headers.get('Authorization') == MASTER_ADMIN_KEY
 
-def _sign_payload(payload_str: str) -> str:
-    return hmac.new(MASTER_ADMIN_KEY.encode(), payload_str.encode(), hashlib.sha256).hexdigest()
-
-def enqueue_output(out, q):
-    for line in iter(out.readline, ''): q.put(line)
-    out.close()
-
-# --- 3. ROUTES ---
 def get_local_version():
     try:
-        with open(resource_path('version.json'), 'r') as f:
+        with open('version.json') as f:
             return json.load(f).get('version', 'unknown')
     except:
-        return 'unknown'
+        return '2.1.0'
 
 @app.context_processor
 def inject_version():
     return dict(version=get_local_version())
 
-@app.route('/get_logs')
-def get_logs():
-    logs = []
-    while not output_queue.empty(): logs.append(output_queue.get())
-    return jsonify({"logs": logs, "active": active_process is not None and active_process.poll() is None})
-
-@app.route('/send_input', methods=['POST'])
-def send_input():
-    global active_process
-    data = request.json
-    user_text = data.get("text", "") + "\n"
-    if active_process and active_process.poll() is None:
-        active_process.stdin.write(user_text)
-        active_process.stdin.flush()
-        return jsonify({"status": "success"})
-    return jsonify({"status": "error", "message": "No active process"}), 400
-
+# 5. CORE AUTH ROUTES
 @app.route('/')
 def home():
     if not session.get('logged_in'):
-        return redirect(url_for('login', **request.args))
-    with sqlite3.connect(DB_PATH) as conn:
-        user = conn.execute("SELECT name FROM users WHERE email = ?", (session['user_email'],)).fetchone()
-        user_name = user[0] if user and user[0] else ""
+        return redirect(url_for('login'))
+    user = User.query.filter_by(email=session['user_email']).first()
+    user_name = user.name if user and user.name else ""
     return render_template('index.html', is_admin=session.get('is_admin'), user_email=session['user_email'], user_name=user_name)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-        with sqlite3.connect(DB_PATH) as conn:
-            user = conn.execute("SELECT password, is_admin FROM users WHERE email = ?", (email,)).fetchone()
-        if user and check_password_hash(user[0], password):
-            session.update({"logged_in": True, "user_email": email, "is_admin": bool(user[1])})
-            return redirect(url_for('home', **request.args))
-        return render_template('login.html', error="Invalid credentials")
+        email    = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        user = User.query.filter_by(email=email).first()
+        if user and check_password_hash(user.password, password):
+            session.permanent = True
+            session.update({'logged_in': True, 'user_email': email, 'is_admin': bool(user.is_admin)})
+            return redirect(url_for('home'))
+        return render_template('login.html', error="Invalid email or password.")
     return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        email, password = request.form.get('email'), request.form.get('password')
-        try:
-            with sqlite3.connect(DB_PATH) as conn:
-                conn.execute("INSERT INTO users (email, password) VALUES (?, ?)", (email, generate_password_hash(password)))
-            return redirect(url_for('login'))
-        except: return render_template('registration.html', error="Email already registered.")
+        email    = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        name     = request.form.get('name', '')
+        if User.query.filter_by(email=email).first():
+            return render_template('registration.html', error="Email already registered.")
+        new_user = User(email=email, password=generate_password_hash(password), name=name)
+        db.session.add(new_user)
+        db.session.commit()
+        return redirect(url_for('login'))
     return render_template('registration.html')
 
 @app.route('/logout')
@@ -139,193 +159,231 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-@app.route('/reset')
-def reset_page():
-    return render_template('reset.html')
-
+# 6. ACCOUNT & VAULT
 @app.route('/update_profile', methods=['POST'])
 def update_profile():
-    if not session.get('logged_in'): return jsonify({"status": "error", "message": "Unauthorized"}), 401
-    name = request.json.get('name')
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("UPDATE users SET name = ? WHERE email = ?", (name, session['user_email']))
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    name = request.json.get('name', '')
+    user = User.query.filter_by(email=session['user_email']).first()
+    if user:
+        user.name = name
+        db.session.commit()
     return jsonify({"status": "success"})
 
 @app.route('/change_password', methods=['POST'])
 def change_password():
-    if not session.get('logged_in'): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
     old_pw = request.json.get('old_password')
     new_pw = request.json.get('new_password')
-    with sqlite3.connect(DB_PATH) as conn:
-        user = conn.execute("SELECT password FROM users WHERE email = ?", (session['user_email'],)).fetchone()
-        if user and check_password_hash(user[0], old_pw):
-            conn.execute("UPDATE users SET password = ? WHERE email = ?", (generate_password_hash(new_pw), session['user_email']))
-            return jsonify({"status": "success"})
-    return jsonify({"status": "error", "message": "Incorrect password"}), 400
+    user = User.query.filter_by(email=session['user_email']).first()
+    if user and check_password_hash(user.password, old_pw):
+        user.password = generate_password_hash(new_pw)
+        db.session.commit()
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Incorrect current password."}), 400
 
-@app.route('/admin/generate_reset_token', methods=['POST'])
-def generate_reset_token():
-    if not session.get('is_admin'): return jsonify({"status": "error", "message": "Admin only"}), 403
-    email = request.json.get('email')
-    new_password = request.json.get('new_password')
-    expires = int(time.time()) + (72 * 3600)  # 72 hours
-    
-    payload = f"{email}|{new_password}|{expires}"
-    sig = _sign_payload(payload)
-    
-    token = {
-        "email": email,
-        "new_password": new_password,
-        "expires": expires,
-        "sig": sig
-    }
-    
-    filename = f"reset_{email.split('@')[0]}.denierreset"
-    return jsonify({"status": "success", "token": token, "filename": filename})
-
-@app.route('/apply_reset', methods=['POST'])
-def apply_reset():
-    data = request.json
-    token = data.get('token')
-    if not token: return jsonify({"status": "error", "message": "No token provided"}), 400
-    
-    email = token.get('email')
-    new_pw = token.get('new_password')
-    expires = token.get('expires')
-    sig = token.get('sig')
-    
-    # Re-verify signature
-    payload = f"{email}|{new_pw}|{expires}"
-    if _sign_payload(payload) != sig:
-        return jsonify({"status": "error", "message": "Invalid token signature"}), 400
-        
-    if time.time() > expires:
-        return jsonify({"status": "error", "message": "Token expired"}), 400
-        
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("UPDATE users SET password = ? WHERE email = ?", (generate_password_hash(new_pw), email))
-    
-    return jsonify({"status": "success", "message": "Password reset successful. Please login with your temporary password."})
-
-@app.route('/reset')
-def reset_page():
-    return render_template('reset.html')
-
-@app.route('/update_profile', methods=['POST'])
-def update_profile():
-    if not session.get('logged_in'): return jsonify({"status": "error", "message": "Unauthorized"}), 401
-    name = request.json.get('name')
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("UPDATE users SET name = ? WHERE email = ?", (name, session['user_email']))
+@app.route('/save_api_vault', methods=['POST'])
+def save_api_vault():
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    user = User.query.filter_by(email=session['user_email']).first()
+    if user:
+        user.api_key = request.json.get('api_key')
+        user.pin = request.json.get('pin')
+        db.session.commit()
     return jsonify({"status": "success"})
 
-@app.route('/change_password', methods=['POST'])
-def change_password():
-    if not session.get('logged_in'): return jsonify({"status": "error", "message": "Unauthorized"}), 401
-    old_pw = request.json.get('old_password')
-    new_pw = request.json.get('new_password')
-    with sqlite3.connect(DB_PATH) as conn:
-        user = conn.execute("SELECT password FROM users WHERE email = ?", (session['user_email'],)).fetchone()
-        if user and check_password_hash(user[0], old_pw):
-            conn.execute("UPDATE users SET password = ? WHERE email = ?", (generate_password_hash(new_pw), session['user_email']))
-            return jsonify({"status": "success"})
-    return jsonify({"status": "error", "message": "Incorrect password"}), 400
+@app.route('/unlock_api_vault', methods=['POST'])
+def unlock_api_vault():
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    pin = request.json.get('pin')
+    user = User.query.filter_by(email=session['user_email']).first()
+    if user and user.pin == pin and user.api_key:
+        return jsonify({"status": "success", "api_key": user.api_key})
+    return jsonify({"status": "error", "message": "Invalid PIN or no key saved."}), 400
 
-@app.route('/admin/generate_reset_token', methods=['POST'])
-def generate_reset_token():
-    if not session.get('is_admin'): return jsonify({"status": "error", "message": "Admin only"}), 403
-    email = request.json.get('email')
-    new_password = request.json.get('new_password')
-    expires = int(time.time()) + (72 * 3600)  # 72 hours
-    
-    payload = f"{email}|{new_password}|{expires}"
-    sig = _sign_payload(payload)
-    
-    token = {
-        "email": email,
-        "new_password": new_password,
-        "expires": expires,
-        "sig": sig
-    }
-    
-    filename = f"reset_{email.split('@')[0]}.denierreset"
-    return jsonify({"status": "success", "token": token, "filename": filename})
+# 7. ADMIN ROUTES
+@app.route('/admin/list_users')
+def admin_list_users():
+    if not session.get('is_admin'): return jsonify({"status": "error"}), 403
+    users = User.query.order_by(User.email).all()
+    return jsonify({"users": [{"email": u.email, "name": u.name, "is_admin": bool(u.is_admin)} for u in users]})
 
-@app.route('/apply_reset', methods=['POST'])
-def apply_reset():
+@app.route('/admin/delete_user', methods=['POST'])
+def admin_delete_user():
+    if not session.get('is_admin'): return jsonify({"status": "error"}), 403
+    email = request.json.get('email', '').strip().lower()
+    if email in SUPER_ADMINS: return jsonify({"status": "error", "message": "Cannot delete super admin."}), 400
+    user = User.query.filter_by(email=email).first()
+    if user:
+        db.session.delete(user)
+        db.session.commit()
+    return jsonify({"status": "success"})
+
+# 8. JOB SUBMISSION
+@app.route('/upload_and_submit', methods=['POST'])
+def upload_and_submit():
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    api_key       = request.form.get('api_key', '').strip()
+    project_name  = request.form.get('project_name', 'Untitled Project').strip()
+    output_folder = request.form.get('output_folder', '').strip()
+    
+    if not api_key: return jsonify({"status": "error", "message": "API Key required."}), 400
+
+    job_folder_id = str(uuid.uuid4())[:12]
+    job_upload_dir = os.path.join(UPLOAD_DIR, job_folder_id)
+    os.makedirs(job_upload_dir, exist_ok=True)
+
+    saved_files = []
+    for field in ['excel', 'specs', 'drawings', 'form', 'contract']:
+        file = request.files.get(field)
+        if file and file.filename:
+            filename = secure_filename(file.filename)
+            file.save(os.path.join(job_upload_dir, filename))
+            saved_files.append(filename)
+
+    if not saved_files: return jsonify({"status": "error", "message": "No files received."}), 400
+
+    new_job = Job(user_email=session['user_email'], upload_path=job_folder_id, api_key=api_key, project_name=project_name, output_folder=output_folder)
+    db.session.add(new_job)
+    db.session.commit()
+
+    return jsonify({"status": "success", "job_id": new_job.id})
+
+@app.route('/get_jobs')
+def get_jobs():
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    if session.get('is_admin'):
+        jobs = Job.query.order_by(Job.timestamp.desc()).limit(50).all()
+    else:
+        jobs = Job.query.filter_by(user_email=session['user_email']).order_by(Job.timestamp.desc()).limit(20).all()
+    
+    return jsonify({"jobs": [{
+        "id": j.id, "email": j.user_email, "project_name": j.project_name or "Untitled",
+        "status": j.status, "pdf": j.result_pdf, "excel": j.result_excel,
+        "time": j.timestamp.strftime("%Y-%m-%d %H:%M:%S"), "logs": (j.logs or "")[-500:]
+    } for j in jobs]})
+
+@app.route('/download/<filename>')
+def download_result(filename):
+    if not session.get('logged_in'): return redirect(url_for('login'))
+    return send_from_directory(RESULTS_DIR, filename, as_attachment=True)
+
+# 9. WORKER API
+@app.route('/api/worker/ping', methods=['POST'])
+def worker_ping():
+    if not _check_worker_auth(): return jsonify({"status": "error"}), 401
+    ping = WorkerPing.query.get(1)
+    if not ping: ping = WorkerPing(id=1)
+    ping.last_ping = datetime.utcnow()
+    db.session.add(ping)
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+@app.route('/api/worker_status')
+def worker_status_route():
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    ping = WorkerPing.query.get(1)
+    if not ping or not ping.last_ping: return jsonify({"online": False, "seconds_ago": None})
+    secs = int((datetime.utcnow() - ping.last_ping).total_seconds())
+    return jsonify({"online": secs < 60, "seconds_ago": secs})
+
+@app.route('/api/worker/next_job')
+def worker_next_job():
+    if not _check_worker_auth(): return jsonify({"status": "error"}), 401
+    job = Job.query.filter_by(status='pending').order_by(Job.timestamp.asc()).first()
+    if job:
+        job.status = 'processing'
+        db.session.commit()
+        return jsonify({
+            "status": "success", "job_id": job.id, "email": job.user_email,
+            "upload_path": job.upload_path, "api_key": job.api_key,
+            "project_name": job.project_name, "output_folder": job.output_folder
+        })
+    return jsonify({"status": "none"})
+
+@app.route('/api/worker/update_job', methods=['POST'])
+def worker_update_job():
+    if not _check_worker_auth(): return jsonify({"status": "error"}), 401
     data = request.json
-    token = data.get('token')
-    if not token: return jsonify({"status": "error", "message": "No token provided"}), 400
+    job = Job.query.get(data.get('job_id'))
+    if job:
+        job.status = data.get('status')
+        job.logs = (job.logs or "") + (data.get('logs', ''))
+        db.session.commit()
+    return jsonify({"status": "success"})
+
+@app.route('/api/worker/upload_result', methods=['POST'])
+def worker_upload_result():
+    if not _check_worker_auth(): return jsonify({"status": "error"}), 401
+    job_id = request.form.get('job_id')
+    job = Job.query.get(job_id)
+    if not job: return jsonify({"status": "error"}), 404
     
-    email = token.get('email')
-    new_pw = token.get('new_password')
-    expires = token.get('expires')
-    sig = token.get('sig')
+    pdf_file = request.files.get('pdf')
+    excel_file = request.files.get('excel')
+    if pdf_file:
+        fname = f"result_{job_id}.pdf"
+        pdf_file.save(os.path.join(RESULTS_DIR, fname))
+        job.result_pdf = fname
+    if excel_file:
+        fname = f"result_{job_id}.xlsm"
+        excel_file.save(os.path.join(RESULTS_DIR, fname))
+        job.result_excel = fname
     
-    # Re-verify signature
-    payload = f"{email}|{new_pw}|{expires}"
-    if _sign_payload(payload) != sig:
-        return jsonify({"status": "error", "message": "Invalid token signature"}), 400
-        
-    if time.time() > expires:
-        return jsonify({"status": "error", "message": "Token expired"}), 400
-        
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("UPDATE users SET password = ? WHERE email = ?", (generate_password_hash(new_pw), email))
+    job.status = 'completed'
+    db.session.commit()
+    return jsonify({"status": "success"})
+
+@app.route('/api/worker/download_project/<job_folder_id>')
+def worker_download_project(job_folder_id):
+    if not _check_worker_auth(): return jsonify({"status": "error"}), 401
+    folder = os.path.join(UPLOAD_DIR, job_folder_id)
+    if not os.path.isdir(folder): return jsonify({"status": "error"}), 404
     
-    return jsonify({"status": "success", "message": "Password reset successful. Please login with your temporary password."})
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for fname in os.listdir(folder):
+            zf.write(os.path.join(folder, fname), fname)
+    buf.seek(0)
+    return send_file(buf, mimetype='application/zip', as_attachment=True, download_name=f'project_{job_folder_id}.zip')
 
-# --- 4. AUTO-UPDATER ---
-updater = AutoUpdater()
+# 10. BROWSE HANDSHAKE
+@app.route('/api/request_browse_output', methods=['POST'])
+def request_browse_output():
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    req = BrowseRequest(email=session['user_email'], status='pending', path=None, created=datetime.utcnow())
+    db.session.merge(req)
+    db.session.commit()
+    return jsonify({"status": "success"})
 
-@app.route('/check_update')
-@app.route('/check_updates')
-def check_updates_route():
-    global JUST_UPDATED, START_TIME, _cached_update_info
-    if JUST_UPDATED and (time.time() - START_TIME < 30):
-        return jsonify({"available": False, "just_updated": True})
-    
-    def _cb(available, info):
-        global _cached_update_info
-        _cached_update_info = info if available else None
-        
-    updater.check_updates(callback=_cb)
-    time.sleep(1.2)
-    info = _cached_update_info
-    if info: return jsonify({"available": True, "version": info['version'], "notes": info['release_notes']})
-    return jsonify({"available": False})
+@app.route('/api/poll_browse_output')
+def poll_browse_output():
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    req = BrowseRequest.query.get(session['user_email'])
+    if req and req.status == 'completed':
+        path = req.path
+        db.session.delete(req)
+        db.session.commit()
+        return jsonify({"status": "completed", "path": path})
+    return jsonify({"status": "pending"})
 
-@app.route('/start_update', methods=['POST'])
-def start_update_route():
-    global _cached_update_info
-    if not _cached_update_info: return jsonify({"status": "error", "message": "No update info"}), 400
-    updater.update_info = _cached_update_info
-    updater.update_available = True
-    if updater.download_and_install(): return jsonify({"status": "success"})
-    return jsonify({"status": "error", "message": "Update failed to start"})
+@app.route('/api/worker/check_browse_output')
+def worker_check_browse_output():
+    if not _check_worker_auth(): return jsonify({"status": "error"}), 401
+    req = BrowseRequest.query.filter_by(status='pending').order_by(BrowseRequest.created.asc()).first()
+    if req: return jsonify({"status": "success", "email": req.email})
+    return jsonify({"status": "none"})
 
-@app.route('/test_success')
-def test_success(): return render_template('test_success.html')
-
-# --- 5. BROWSE & LAUNCH ---
-@app.route('/browse_folder')
-def browse_folder():
-    root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True)
-    f = filedialog.askdirectory(); root.destroy()
-    return jsonify({"path": os.path.normpath(f) if f else ""})
-
-@app.route('/launch', methods=['POST'])
-def launch():
-    global active_process
-    if active_process and active_process.poll() is None: return jsonify({"status": "error", "message": "Already running"})
+@app.route('/api/worker/submit_browse_output', methods=['POST'])
+def worker_submit_browse_output():
+    if not _check_worker_auth(): return jsonify({"status": "error"}), 401
     data = request.json
-    env = os.environ.copy()
-    env.update({k: data.get(v, "") for k,v in {"GEMINI_API_KEY":"api_key","PROJECT_FOLDER":"folder"}.items()})
-    active_process = subprocess.Popen([sys.executable, "-u", resource_path("SubmittalBuilderMetaAgent.py"), "--web"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, text=True, bufsize=1, creationflags=0x08000000)
-    threading.Thread(target=enqueue_output, args=(active_process.stdout, output_queue), daemon=True).start()
+    req = BrowseRequest.query.get(data.get('email'))
+    if req:
+        req.status = 'completed'
+        req.path = data.get('path', 'CANCELLED')
+        db.session.commit()
     return jsonify({"status": "success"})
 
 if __name__ == '__main__':
-    if "--updated" in sys.argv: JUST_UPDATED = True
-    Timer(1.5, lambda: webbrowser.open_new("http://127.0.0.1:5002/")).start()
     app.run(debug=True, use_reloader=False, port=5002)

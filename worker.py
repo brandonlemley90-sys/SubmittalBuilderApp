@@ -10,10 +10,10 @@ from tkinter import filedialog
 from pathlib import Path
 
 # --- CONFIGURATION ---
-# Replace this with your actual PythonAnywhere URL once deployed
-SERVER_URL = "http://127.0.0.1:5002" 
+# The actual Render URL
+SERVER_URL = "https://submittalbuilderapp.onrender.com" 
 MASTER_ADMIN_KEY = "DenierSubmittalsLemley90"
-POLL_INTERVAL = 30 # Seconds
+POLL_INTERVAL = 10 # Seconds (faster for Render)
 
 def find_result_files(folder_path):
     """Try to find the generated submittal PDF and updated Excel in the folder."""
@@ -41,24 +41,27 @@ def run_worker():
         try:
             headers = {"Authorization": MASTER_ADMIN_KEY}
 
-            # 0. Check for Remote Browse Requests
-            browse_res = requests.get(f"{SERVER_URL}/api/worker/check_browse", headers=headers, timeout=5)
+            # 0. Check for Remote Browse Requests (Handshake)
+            browse_res = requests.get(f"{SERVER_URL}/api/worker/check_browse_output", headers=headers, timeout=5)
             if browse_res.status_code == 200:
                 b_data = browse_res.json()
                 if b_data.get("status") == "success":
-                    print(f"📂 Remote Browse Request from {b_data['email']}...")
-                    selected_path = filedialog.askdirectory(title="Select Project Folder for Website")
+                    email = b_data['email']
+                    print(f"📂 Remote Browse Request from {email}...")
+                    selected_path = filedialog.askdirectory(title="Select Project Output Folder")
                     if selected_path:
                         normalized = os.path.normpath(selected_path)
-                        requests.post(f"{SERVER_URL}/api/worker/submit_browse", 
+                        requests.post(f"{SERVER_URL}/api/worker/submit_browse_output", 
                                      headers=headers, 
-                                     json={"email": b_data["email"], "path": normalized})
+                                     json={"email": email, "path": normalized})
                         print(f"   ✅ Path sent: {normalized}")
                     else:
-                        # Even if cancelled, we should probably clear it or handle it
-                        requests.post(f"{SERVER_URL}/api/worker/submit_browse", 
+                        requests.post(f"{SERVER_URL}/api/worker/submit_browse_output", 
                                      headers=headers, 
-                                     json={"email": b_data["email"], "path": "CANCELLED"})
+                                     json={"email": email, "path": "CANCELLED"})
+
+            # Send heartbeat ping
+            requests.post(f"{SERVER_URL}/api/worker/ping", headers=headers, timeout=5)
 
             # 1. Ask the server for the next job
             response = requests.get(f"{SERVER_URL}/api/worker/next_job", headers=headers, timeout=10)
