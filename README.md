@@ -1,12 +1,19 @@
 # DenierAI Submittal Builder
 
-A desktop application for building electrical submittal packages. Runs as a Windows `.exe` with a built-in web interface (Flask). Includes a live auto-update system — users receive new versions automatically every time they open the app.
+A cloud-based web application for building electrical submittal packages. Hosted on **Render.com**, it provides a centralized dashboard for generating submittals using AI-powered builders.
 
 ---
 
-## For Developers — Running From Source
+## Accessing the Application
 
-If you want to run the app directly without building an executable:
+The production application is accessible at:
+**[https://submittalbuilderapp.onrender.com/](https://submittalbuilderapp.onrender.com/)**
+
+---
+
+## For Developers — Running Locally
+
+If you want to run the app locally for development:
 
 ```bash
 # 1. Install dependencies
@@ -16,49 +23,25 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The app will open a local browser window automatically.
+The app will be available at `http://127.0.0.1:5002`.
 
 ---
 
-## For Developers — Releasing & Distribution
+## Deployment — Render.com
 
-See **[RELEASE_GUIDE.md](RELEASE_GUIDE.md)** for how to push updates.
-
-See **[DISTRIBUTION_AND_TESTING_GUIDE.md](DISTRIBUTION_AND_TESTING_GUIDE.md)** for how to give the app to new users and how to test for yourself.
-
-Short version:
-1. Edit `VERSION` and `RELEASE_NOTES` at the top of `release.py`
-2. Run `python release.py`
-3. Copy-paste the git commands it prints
-
----
-
-## How the Auto-Update System Works
-
-Each time a user opens the app, it checks:
-```
-https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/version.json
-```
-
-If the version number there is higher than what the user has installed, a blue update banner appears. The user clicks it, the update downloads and installs, and the app restarts — no manual steps needed on the user's end.
-
----
+The application is configured for automatic deployment via `render.yaml`. Every push to the `main` branch of the source repository triggers a new build and deployment on Render.
 
 ## Project Structure
 
 | File / Folder | Purpose |
 |---|---|
 | `app.py` | Main application entry point |
-| `auto_updater.py` | Checks for updates and handles downloads |
-| `bootstrap_installer.py` | First-time installer for new users |
-| `release.py` | **← Use this to publish new releases** |
-| `build_app.py` | Low-level build logic (called by release.py) |
-| `build_bootstrap.py` | Builds the installer executable |
-| `version.json` | Current version info (auto-updated by release.py) |
-| `templates/` | HTML templates for the web UI |
-| `static/` | CSS, JS, images |
-| `dist/` | Build output (generated, not committed) |
-| `release_output/` | Staged files ready to push (generated) |
+| `worker.py` | Local worker logic for processing intensive PDF tasks |
+| `render.yaml` | Render.com deployment configuration |
+| `requirements.txt` | Python dependencies |
+| `templates/` | Jinja2 HTML templates |
+| `static/` | CSS, JS, and branding assets |
+| `version.json` | Current application version tracker |
 
 ---
 

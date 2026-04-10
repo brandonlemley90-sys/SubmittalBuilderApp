@@ -177,7 +177,7 @@ def reset_password():
     user.password = generate_password_hash(temp_pass)
     db.session.commit()
     
-    body = f"Hello,\n\nAn administrator has reset your password for the Denier Submittal Builder.\n\nTemporary Password: {temp_pass}\n\nPlease log in and change your password immediately.\n\nLink: https://submittalbuilderapp.onrender.com/login"
+    body = f"Hello,\n\nAn administrator has reset your password for the Denier Submittal Builder.\n\nTemporary Password: {temp_pass}\n\nPlease log in and change your password immediately.\n\nLink: {request.host_url}login"
     sent = send_email(email, "Password Reset - Denier Submittal Builder", body)
     
     if sent:
@@ -378,7 +378,9 @@ def worker_status_route():
 @app.route('/api/worker/next_job')
 def worker_next_job():
     if not _check_worker_auth(): return jsonify({"status": "error"}), 401
-    job = Job.query.filter_by(status='pending').order_by(Job.timestamp.asc()).first()
+    email = request.args.get('email')
+    if not email: return jsonify({"status": "error", "message": "Missing email"}), 400
+    job = Job.query.filter_by(status='pending', user_email=email).order_by(Job.timestamp.asc()).first()
     if job:
         job.status = 'processing'
         db.session.commit()
@@ -458,7 +460,9 @@ def poll_browse_output():
 @app.route('/api/worker/check_browse_output')
 def worker_check_browse_output():
     if not _check_worker_auth(): return jsonify({"status": "error"}), 401
-    req = BrowseRequest.query.filter_by(status='pending').order_by(BrowseRequest.created.asc()).first()
+    email = request.args.get('email')
+    if not email: return jsonify({"status": "error", "message": "Missing email"}), 400
+    req = BrowseRequest.query.filter_by(status='pending', email=email).first()
     if req: return jsonify({"status": "success", "email": req.email})
     return jsonify({"status": "none"})
 
@@ -473,5 +477,12 @@ def worker_submit_browse_output():
         db.session.commit()
     return jsonify({"status": "success"})
 
+# 11. HEALTH CHECK
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy", "timestamp": datetime.utcnow().isoformat()}), 200
+
 if __name__ == '__main__':
-    app.run(debug=True, use_reloader=False, port=5002)
+    port = int(os.environ.get('PORT', 5002))
+    debug_mode = os.environ.get('RENDER') is None
+    app.run(host='0.0.0.0', port=port, debug=debug_mode, use_reloader=False)

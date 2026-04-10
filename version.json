@@ -1,7 +1,4 @@
 {
-  "version": "1.0.4",
-  "release_notes": "Version 1.0.4 - Baseline for update test.",
-  "download_url": "https://brandonlemley90-sys.github.io/DenierSubmittalBuilderUpdates/DenierAI_Submittal_Builder_v1.0.4.zip",
-  "file_hash": "MOCK_HASH_V4",
-  "release_date": "2026-04-08"
+  "version": "2.1.0",
+  "release_date": "2026-04-10"
 }
