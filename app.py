@@ -133,6 +133,19 @@ class WorkerPing(db.Model):
 def init_db():
     with app.app_context():
         db.create_all()
+        # Run any column migrations that create_all won't handle on existing tables
+        migrations = [
+            "ALTER TABLE users ADD COLUMN job_title VARCHAR(100) DEFAULT ''",
+            "ALTER TABLE jobs ADD COLUMN current_step INTEGER DEFAULT 0",
+            "ALTER TABLE jobs ADD COLUMN step_name VARCHAR(100) DEFAULT ''",
+            "ALTER TABLE jobs ADD COLUMN output_folder VARCHAR(255) DEFAULT ''",
+        ]
+        for sql in migrations:
+            try:
+                db.session.execute(db.text(sql))
+            except Exception:
+                pass  # Column already exists
+        db.session.commit()
         for email in SUPER_ADMINS:
             admin = User.query.filter_by(email=email).first()
             if admin:
