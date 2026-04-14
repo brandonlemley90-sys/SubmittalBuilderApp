@@ -13,17 +13,100 @@ from tkinter import filedialog
 from pathlib import Path
 
 # --- CONFIGURATION ---
-SERVER_URL        = "https://submittalbuilderapp.onrender.com"
-MASTER_ADMIN_KEY  = os.environ.get('MASTER_ADMIN_KEY', 'DenierSubmittalsLemley90')
-POLL_INTERVAL     = 3
-WORKER_EMAIL      = "blemley@denier.com"  # Set to YOUR account email
-LOCAL_VERSION     = "2.2.0"              # Keep in sync with version.json
+SERVER_URL       = "https://submittalbuilderapp.onrender.com"
+MASTER_ADMIN_KEY = os.environ.get('MASTER_ADMIN_KEY', 'DenierSubmittalsLemley90')
+POLL_INTERVAL    = 3
+WORKER_EMAIL     = "blemley@denier.com"  # Set to YOUR account email
+LOCAL_VERSION    = "2.2.0"              # Keep in sync with version.json
+
+# Teams shared folder where the latest DenierWorker.exe is published
+TEAMS_FOLDER = os.path.join(
+    os.environ.get('USERPROFILE', ''),
+    "Denier",
+    "Denier Operations Playbook-Submittal Builder - Documents",
+    "Submittal Builder"
+)
+TASK_NAME = "Denier Submittal Worker"
+
+# True when running as a compiled PyInstaller exe
+IS_EXE = getattr(sys, 'frozen', False)
+
+
+# -------------------------------------------------------------------
+# FIRST-RUN: REGISTER IN TASK SCHEDULER (exe mode only)
+# -------------------------------------------------------------------
+def ensure_task_scheduler():
+    """Register this exe to auto-start silently on Windows login."""
+    if not IS_EXE:
+        return
+    exe_path = sys.executable
+    result = subprocess.run(
+        ['schtasks', '/query', '/tn', TASK_NAME],
+        capture_output=True
+    )
+    if result.returncode != 0:
+        # Not registered yet — register now
+        subprocess.run([
+            'schtasks', '/create',
+            '/tn', TASK_NAME,
+            '/tr', f'"{exe_path}"',
+            '/sc', 'ONLOGON',
+            '/rl', 'HIGHEST',
+            '/f'
+        ], capture_output=True)
+        print(f"[SETUP] Registered '{TASK_NAME}' in Task Scheduler.")
+    else:
+        # Already registered — make sure it points to the current location
+        subprocess.run([
+            'schtasks', '/change',
+            '/tn', TASK_NAME,
+            '/tr', f'"{exe_path}"'
+        ], capture_output=True)
+
 
 # -------------------------------------------------------------------
 # AUTO-UPDATE
 # -------------------------------------------------------------------
 def check_for_update():
-    """Download and restart if the server has a newer worker version."""
+    """
+    Exe mode:  look for a newer DenierWorker.exe in the Teams shared folder.
+               If found, replace this exe via a helper .bat and restart.
+    Script mode: download updated worker.py from the Render server.
+    """
+    if IS_EXE:
+        _check_teams_update()
+    else:
+        _check_server_update()
+
+
+def _check_teams_update():
+    """Check Teams folder for a newer DenierWorker.exe."""
+    try:
+        teams_exe = os.path.join(TEAMS_FOLDER, "DenierWorker.exe")
+        if not os.path.exists(teams_exe):
+            return
+        current_exe = sys.executable
+        # If the Teams copy is newer (by mtime), self-update
+        if os.path.getmtime(teams_exe) > os.path.getmtime(current_exe) + 30:
+            print("[UPDATE] Newer DenierWorker.exe found in Teams folder. Updating...")
+            # Can't replace a running exe on Windows directly — use a helper bat
+            bat_path = os.path.join(os.path.dirname(current_exe), "_denier_update.bat")
+            with open(bat_path, 'w') as f:
+                f.write(
+                    f'@echo off\n'
+                    f'timeout /t 3 /nobreak >nul\n'
+                    f'copy /Y "{teams_exe}" "{current_exe}"\n'
+                    f'start "" "{current_exe}"\n'
+                    f'del "%~f0"\n'
+                )
+            subprocess.Popen(bat_path, shell=True, creationflags=0x08000000)  # CREATE_NO_WINDOW
+            sys.exit(0)
+    except Exception as e:
+        print(f"[UPDATE] Teams update check skipped: {e}")
+
+
+def _check_server_update():
+    """Script mode: download updated worker.py from the Render server."""
     try:
         r = requests.get(f"{SERVER_URL}/api/version", timeout=5)
         server_ver = r.json().get("version", LOCAL_VERSION)
@@ -31,12 +114,13 @@ def check_for_update():
             print(f"[UPDATE] New version {server_ver} available. Downloading...")
             r2 = requests.get(f"{SERVER_URL}/api/worker/latest", timeout=15)
             r2.raise_for_status()
-            new_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker_new.py")
+            script_path = os.path.abspath(__file__)
+            new_path    = script_path + ".new"
             with open(new_path, 'wb') as f:
                 f.write(r2.content)
-            os.replace(new_path, os.path.abspath(__file__))
+            os.replace(new_path, script_path)
             print(f"[UPDATE] Updated to {server_ver}. Restarting...")
-            subprocess.Popen([sys.executable, os.path.abspath(__file__)] + sys.argv[1:])
+            subprocess.Popen([sys.executable, script_path] + sys.argv[1:])
             sys.exit(0)
         else:
             print(f"[UPDATE] Worker is up to date (v{LOCAL_VERSION}).")
@@ -78,7 +162,9 @@ def post_step_update(headers, job_id, step_num, step_name, logs=""):
 # -------------------------------------------------------------------
 def run_worker():
     print(f"[WORKER] DenierAI Local Worker v{LOCAL_VERSION} Started (Polling {SERVER_URL})...")
-    print("Keep this window open to process jobs from the website.")
+
+    # First-run: silently register in Task Scheduler so we auto-start on login
+    ensure_task_scheduler()
 
     # Check for updates before starting loop
     check_for_update()
