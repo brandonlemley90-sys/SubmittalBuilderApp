@@ -1,14 +1,19 @@
 import os
 import re
 import json
+<<<<<<< Updated upstream
 import fitz
 import xlwings as xw
+=======
+>>>>>>> Stashed changes
 import requests
+import fitz # PyMuPDF
+import xlwings as xw
 import time
 import builder_shared as shared
 
 # =============================================================================
-# MODULARIZED BUILDER: Grounding and Bonding
+# --- THE PLATINUM GROUNDING AND BONDING BUILDER ---
 # =============================================================================
 
 def _staple(job_name, PROJECT_FOLDER, review_pdf, index_pdf, cutsheets_pdf):
@@ -37,6 +42,7 @@ def run(context):
     api_key  = context['api_key']
     config   = context['project_config']
     job_info = context['job_info']
+<<<<<<< Updated upstream
 
     shared.log("Starting Grounding and Bonding Builder...", "G&B")
 
@@ -183,3 +189,97 @@ def run(context):
         return None
 
     return _staple(job_name, PROJECT_FOLDER, review_pdf_path, index_pdf_path, cutsheets_pdf_path)
+=======
+    base = shared.BaseBuilder(context, "Grounding", "Grounding and Bonding")
+    
+    shared.log("Starting Grounding and Bonding Builder...", "G&B")
+
+    try:
+        # 1. Load Denier Material Database for Grounding
+        shared.log("Loading Grounding & Bonding Material Database...", "EXCEL")
+        material_db = base.load_material_database("Grounding and Bonding List")
+        if not material_db:
+            shared.log("Grounding and Bonding List database is empty or missing!", "ERROR")
+            return False
+
+        # 2. Extract Source Text (Contract is Authority)
+        shared.log("Extracting Spec and Drawing Text (Expanded Context)...", "AI")
+        spec_text = shared.extract_pdf_text(base.get_spec_path())
+        drawing_text = shared.extract_pdf_text(base.get_drawings_path())
+        contract_text = shared.extract_pdf_text(base.get_contract_path())
+        
+        db_summary = [{"Catalog": m.get('type', ''), "Mfg": m.get('manufacturer', ''), "Desc": m.get('description', '')} for m in material_db]
+        
+        prompt = f"""
+        ACT AS AN ELECTRICAL PROJECT MANAGER. Perform a submittal review for Grounding and Bonding.
+        
+        CONTRACT (ULTIMATE AUTHORITY):
+        {contract_text[:100000]}
+        
+        SPECIFICATIONS:
+        {spec_text[:150000]}
+        
+        DRAWINGS:
+        {drawing_text[:50000]}
+
+        MATERIAL DATABASE (Match strictly against these types):
+        {json.dumps(db_summary)}
+
+        PLATINUM RULES:
+        1. THE CONTRACT HAS THE FINAL SAY.
+        2. KITTING RULE (ULTIMATE MANDATE): If Ground Rods are discovered, YOU MUST also return the matching "Acorn Clamps" and "Bare Copper Grounding Hubs" from the database.
+        3. EXOTHERMIC WELDING: If Cadweld or exothermic welding is mentioned, pull the associated molds and shots.
+        4. BUS BAR RULE: If Electrical Rooms are mentioned, pull the Ground Bus Bars (Copper) from the database.
+        
+        Return ONLY a JSON array of objects.
+        Object Format: {{"Type": "XX", "Manufacturer": "XX", "Description": "XX"}}
+        """
+        raw_ai = shared.call_gemini(api_key, prompt, "")
+        final_items = json.loads(raw_ai)
+
+        # 3. Update Excel
+        sheet_name = 'Grounding Index'
+        if sheet_name not in [s.name for s in wb.sheets]:
+            shared.log(f"'{sheet_name}' sheet not found. Creating it...", "WARNING")
+            wb.sheets.add(sheet_name)
+        
+        ws_index = wb.sheets[sheet_name]
+        try:
+            ws_index.api.Unprotect()
+            shared.log("🔓 Sheet unprotected to allow writing.", "EXCEL")
+        except:
+            pass
+            
+        ws_index.range('A8:C100').clear_contents()
+        
+        pdf_paths = []
+        for i, item in enumerate(final_items):
+            row = 8 + i
+            cat = item.get('Catalog', '')
+            mfg = item.get('Brand', '')
+            desc = item.get('Description', '')
+            
+            ws_index.range(f'A{row}').value = cat
+            ws_index.range(f'B{row}').value = mfg
+            ws_index.range(f'C{row}').value = desc
+            
+            # Find matching PDF path
+            path = base.find_best_pdf(cat, mfg, desc)
+            if path and path not in pdf_paths:
+                pdf_paths.append(path)
+
+        # 4. Embed PDFs into "Grounding Cut Sheets"
+        if pdf_paths:
+            base.embed_pdfs(pdf_paths, "Grounding and Bonding Cut Sheets")
+        
+        # 5. Finalize Submittal
+        base.finalize_submittal("Grounding and Bonding")
+        
+        wb.save()
+        shared.log("Grounding and Bonding Builder Phase Completed Successfully.", "SUCCESS")
+        return True
+
+    except Exception as e:
+        shared.log(f"Grounding and Bonding Builder Error: {e}", "ERROR")
+        return False
+>>>>>>> Stashed changes

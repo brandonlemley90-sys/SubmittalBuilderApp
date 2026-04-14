@@ -22,10 +22,18 @@ def scan_project_folder(folder_path):
     config = {
         "PROJECT_FOLDER":      os.path.normpath(folder_path),
         "EXCEL_WORKBOOK_NAME": "",
+<<<<<<< Updated upstream
         "JOB_FORM_PDF_NAME":   "",
         "SPEC_PDF_NAME":       "",
         "DRAWINGS_PDF_NAME":   "",
         "CONTRACT_PDF_NAME":   ""
+=======
+        "JOB_FORM_PDF_NAME": "",
+        "SPEC_PDF_NAME": "",
+        "DRAWINGS_PDF_NAME": "",
+        "CONTRACT_PDF_NAME": "",
+        "CATALOG_ROOT": os.path.join(os.environ.get('USERPROFILE', ''), "Denier", "Denier Operations Playbook-Submittal Builder - Documents", "Submittal Builder", "Catalogs")
+>>>>>>> Stashed changes
     }
     if not os.path.exists(folder_path):
         return config
@@ -58,17 +66,53 @@ def get_user_setup():
         show="*"
     )
     if not api_key or not api_key.strip():
+<<<<<<< Updated upstream
         print("🛑 Operation cancelled (No API Key).")
+=======
+        print("[STOP] Operation cancelled (No API Key provided).")
+>>>>>>> Stashed changes
         sys.exit(0)
 
-    print("📁 Please select the Main Project Folder...")
+    print("[FILE] Please select the Main Project Folder...")
     project_folder = filedialog.askdirectory(title="Select Main Project Folder")
     if not project_folder:
         print("🛑 Operation cancelled.")
         sys.exit(0)
 
+<<<<<<< Updated upstream
     def pick_file(title, filetypes):
         return filedialog.askopenfilename(initialdir=project_folder, title=title, filetypes=filetypes)
+=======
+    print("[EXCEL] Please select the Excel Workbook...")
+    excel_path = filedialog.askopenfilename(
+        initialdir=project_folder, title="Select Excel Workbook",
+        filetypes=[("Excel Files", "*.xlsm;*.xlsx")]
+    )
+
+    print("[FORM] Please select the Job Setup Form PDF...")
+    job_form_path = filedialog.askopenfilename(
+        initialdir=project_folder, title="Select Job Setup Form PDF",
+        filetypes=[("PDF Files", "*.pdf")]
+    )
+
+    print("[SPEC] Please select the Specs PDF...")
+    spec_path = filedialog.askopenfilename(
+        initialdir=project_folder, title="Select Specs PDF",
+        filetypes=[("PDF Files", "*.pdf")]
+    )
+
+    print("[PLANS] Please select the Drawings PDF...")
+    drawings_path = filedialog.askopenfilename(
+        initialdir=project_folder, title="Select Drawings PDF",
+        filetypes=[("PDF Files", "*.pdf")]
+    )
+
+    print("[CONTRACT] Please select the Contract PDF...")
+    contract_path = filedialog.askopenfilename(
+        initialdir=project_folder, title="Select Contract PDF",
+        filetypes=[("PDF Files", "*.pdf")]
+    )
+>>>>>>> Stashed changes
 
     excel_path    = pick_file("Select Excel Workbook",      [("Excel Files", "*.xlsm;*.xlsx")])
     job_form_path = pick_file("Select Job Setup Form PDF",  [("PDF Files", "*.pdf")])
@@ -78,12 +122,22 @@ def get_user_setup():
     root.destroy()
 
     project_config = {
+<<<<<<< Updated upstream
         "PROJECT_FOLDER":      os.path.normpath(project_folder),
         "EXCEL_WORKBOOK_NAME": os.path.basename(excel_path)    if excel_path    else "",
         "JOB_FORM_PDF_NAME":   os.path.basename(job_form_path) if job_form_path else "",
         "SPEC_PDF_NAME":       os.path.basename(spec_path)     if spec_path     else "",
         "DRAWINGS_PDF_NAME":   os.path.basename(drawings_path) if drawings_path else "",
         "CONTRACT_PDF_NAME":   os.path.basename(contract_path) if contract_path else "",
+=======
+        "PROJECT_FOLDER": os.path.normpath(project_folder),
+        "EXCEL_WORKBOOK_NAME": os.path.basename(excel_path) if excel_path else "",
+        "JOB_FORM_PDF_NAME": os.path.basename(job_form_path) if job_form_path else "",
+        "SPEC_PDF_NAME": os.path.basename(spec_path) if spec_path else "",
+        "DRAWINGS_PDF_NAME": os.path.basename(drawings_path) if drawings_path else "",
+        "CONTRACT_PDF_NAME": os.path.basename(contract_path) if contract_path else "",
+        "CATALOG_ROOT": os.path.join(os.environ.get('USERPROFILE', ''), "Denier", "Denier Operations Playbook-Submittal Builder - Documents", "Submittal Builder", "Catalogs")
+>>>>>>> Stashed changes
     }
     return api_key.strip(), project_config
 
@@ -163,6 +217,7 @@ def run_pipeline(master_api_key, project_config):
             shared.log(f"Error in {mod_name}: {e}", "ERROR")
             break
 
+<<<<<<< Updated upstream
     shared.log(f"Pipeline complete. {len(completed_pdfs)} of {len(BUILDER_MODULES)} submittals built.", "PIPELINE")
     for pdf in completed_pdfs:
         shared.log(f"  - {os.path.basename(pdf)}", "PIPELINE")
@@ -172,6 +227,9 @@ def run_pipeline(master_api_key, project_config):
     else:
         shared.log("No submittals were generated. Check logs above.", "WARNING")
 
+=======
+    shared.log("ALL SUBMITTALS COMPLETED SUCCESSFULLY!", "PIPELINE")
+>>>>>>> Stashed changes
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--web":

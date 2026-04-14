@@ -1,6 +1,7 @@
 import os
 import re
 import json
+<<<<<<< Updated upstream
 import fitz
 import builder_shared as shared
 
@@ -196,3 +197,116 @@ def run(context):
         return None
 
     return _staple(job_name, PROJECT_FOLDER, review_pdf_path, index_pdf_path, cutsheets_pdf_path)
+=======
+import requests
+import fitz # PyMuPDF
+import xlwings as xw
+import time
+import builder_shared as shared
+
+# =============================================================================
+# --- THE PLATINUM WIRING DEVICES BUILDER ---
+# =============================================================================
+
+def run(context):
+    wb = context['wb']
+    api_key = context['api_key']
+    config = context['project_config']
+    job_info = context['job_info']
+    base = shared.BaseBuilder(context, "Wiring Devices", "Wiring Devices")
+    
+    shared.log("Starting Wiring Devices Builder...", "DEVICES")
+
+    try:
+        # 1. Load Denier Material Database for Wiring Devices
+        shared.log("Loading Wiring Devices Material Database...", "EXCEL")
+        material_db = base.load_material_database("Wiring Devices List")
+        if not material_db:
+            shared.log("Wiring Devices List database is empty or missing!", "ERROR")
+            return False
+
+        # 2. Extract Source Text (Contract is Authority)
+        shared.log("Extracting Spec and Drawing Text (Expanded Context)...", "AI")
+        spec_text = shared.extract_pdf_text(base.get_spec_path())
+        drawing_text = shared.extract_pdf_text(base.get_drawings_path())
+        contract_text = shared.extract_pdf_text(base.get_contract_path())
+        
+        db_summary = [{"Catalog": m.get('catalog number', ''), "Mfg": m.get('brand', ''), "Desc": m.get('device description', '')} for m in material_db]
+        
+        prompt = f"""
+        ACT AS AN ELECTRICAL PROJECT MANAGER. Perform a submittal review for Wiring Devices.
+        
+        CONTRACT (ULTIMATE AUTHORITY):
+        {contract_text[:100000]}
+        
+        SPECIFICATIONS:
+        {spec_text[:150000]}
+        
+        DRAWINGS:
+        {drawing_text[:50000]}
+
+        MATERIAL DATABASE (Match against 'Catalog'):
+        {json.dumps(db_summary)}
+
+        PLATINUM RULES:
+        1. THE CONTRACT HAS THE FINAL SAY.
+        2. AMPERAGE (ABSOLUTE MANDATE): NEVER pull 15A devices (e.g. 5262). You are FORBIDDEN from using 15A. You MUST ALWAYS pull the 20A versions (e.g. 5362).
+        3. COLOR RULE: Default to IVORY if not specified.
+        4. HUBBELL BROWN RULE: Base catalog numbers (e.g. GF20) are BROWN. Do not append 'I' or 'W' unless specified.
+        5. WALLPLATE RULES: If Spec requires Stainless Steel, you are STRICKLY FORBIDDEN from pulling Nylon. Use SS catalog numbers.
+        6. WEATHERPROOF RULES: If WP or In-Use covers are required, pull ALL THREE 20A variants (Standard GF20, Weather Resistant GFTW20, and Tamper/Weather Resistant GFTWRST20).
+        7. EXCLUSIONS: Ignore Floor Boxes, Poke-Thrus, Dimmers, and Occ Sensors.
+        
+        Return ONLY a JSON array of objects.
+        Object Format: {{"Catalog": "XX", "Brand": "XX", "Description": "XX", "Reason": "XX"}}
+        """
+        raw_ai = shared.call_gemini(api_key, prompt, "")
+        final_items = json.loads(raw_ai)
+
+        # 3. Update Excel
+        sheet_name = 'Wiring Device Index'
+        if sheet_name not in [s.name for s in wb.sheets]:
+            shared.log(f"'{sheet_name}' sheet not found. Creating it...", "WARNING")
+            wb.sheets.add(sheet_name)
+        
+        ws_index = wb.sheets[sheet_name]
+        try:
+            ws_index.api.Unprotect()
+            shared.log("🔓 Sheet unprotected to allow writing.", "EXCEL")
+        except:
+            pass
+            
+        shared.log(f"Writing {len(final_items)} items to {sheet_name}...", "EXCEL")
+        ws_index.range('A8:C100').clear_contents()
+        
+        pdf_paths = []
+        for i, item in enumerate(final_items):
+            row = 8 + i
+            cat = item.get('Catalog', '')
+            mfg = item.get('Brand', '')
+            desc = item.get('Description', '')
+            
+            ws_index.range(f'A{row}').value = cat
+            ws_index.range(f'B{row}').value = mfg
+            ws_index.range(f'C{row}').value = desc
+            
+            # Find matching PDF path
+            path = base.find_best_pdf(cat, mfg, desc)
+            if path and path not in pdf_paths:
+                pdf_paths.append(path)
+
+        # 4. Embed PDFs into "Wiring Device Cut Sheets"
+        if pdf_paths:
+            base.embed_pdfs(pdf_paths, "Wiring Device Cut Sheets")
+        
+        # 5. Finalize Submittal
+        base.finalize_submittal("Wiring Devices")
+        
+        wb.save()
+        shared.log("Wiring Devices Builder Phase Completed Successfully.", "SUCCESS")
+        return True
+
+    except Exception as e:
+        shared.log(f"Wiring Devices Builder Error: {e}", "ERROR")
+        return False
+>>>>>>> Stashed changes
