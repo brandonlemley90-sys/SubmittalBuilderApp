@@ -32,9 +32,9 @@ if SUPABASE_URL and SUPABASE_KEY:
     try:
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        print("✅ Supabase storage initialized")
+        print("[OK] Supabase storage initialized")
     except Exception as e:
-        print(f"⚠️ Supabase init failed: {e}")
+        print(f"[WARN] Supabase init failed: {e}")
 
 # Local fallback dir for development (no Supabase)
 BASE_DATA_DIR = os.path.join(os.getenv('LOCALAPPDATA', os.path.expanduser('~')), 'DenierAI')
@@ -167,7 +167,7 @@ def send_email(to, subject, body):
     sender   = os.environ.get('SMTP_USER', 'blemley@denier.com')
     password = os.environ.get('SMTP_PASS')
     if not password:
-        print("⚠️ SMTP_PASS not set. Email not sent.")
+        print("[WARN] SMTP_PASS not set. Email not sent.")
         return False
     msg = MIMEMultipart()
     msg['From']    = f"Denier AI <{sender}>"
@@ -182,7 +182,7 @@ def send_email(to, subject, body):
         server.quit()
         return True
     except Exception as e:
-        print(f"❌ SMTP Error: {e}")
+        print(f"[ERROR] SMTP Error: {e}")
         return False
 
 def _check_worker_auth() -> bool:
@@ -430,7 +430,7 @@ def upload_and_submit():
                 )
                 saved_files.append(filename)
             except Exception as e:
-                print(f"⚠️ Upload error for {field}: {e}")
+                print(f"[WARN] Upload error for {field}: {e}")
 
     if not saved_files:
         return jsonify({"status": "error", "message": "No files received."}), 400
@@ -587,7 +587,7 @@ def worker_download_project(job_folder_id):
                 file_data = storage_download(f"{prefix}/{fname}")
                 zf.writestr(fname, file_data)
             except Exception as e:
-                print(f"⚠️ Could not pack {fname}: {e}")
+                print(f"[WARN] Could not pack {fname}: {e}")
     buf.seek(0)
     return send_file(buf, mimetype='application/zip', as_attachment=True,
                      download_name=f'project_{job_folder_id}.zip')
