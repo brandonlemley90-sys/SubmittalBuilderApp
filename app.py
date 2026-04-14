@@ -94,12 +94,13 @@ db = SQLAlchemy(app)
 # 4. MODELS
 class User(db.Model):
     __tablename__ = 'users'
-    email    = db.Column(db.String(120), primary_key=True)
-    password = db.Column(db.String(255), nullable=False)
-    api_key  = db.Column(db.String(255))
-    pin      = db.Column(db.String(10))
-    is_admin = db.Column(db.Integer, default=0)
-    name     = db.Column(db.String(100), default="")
+    email     = db.Column(db.String(120), primary_key=True)
+    password  = db.Column(db.String(255), nullable=False)
+    api_key   = db.Column(db.String(255))
+    pin       = db.Column(db.String(10))
+    is_admin  = db.Column(db.Integer, default=0)
+    name      = db.Column(db.String(100), default="")
+    job_title = db.Column(db.String(100), default="")
 
 class Job(db.Model):
     __tablename__ = 'jobs'
@@ -196,9 +197,11 @@ def home():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     user = User.query.filter_by(email=session['user_email']).first()
-    user_name = user.name if user and user.name else ""
+    user_name  = user.name      if user and user.name      else ""
+    job_title  = user.job_title if user and user.job_title else ""
     return render_template('index.html', is_admin=session.get('is_admin'),
-                           user_email=session['user_email'], user_name=user_name)
+                           user_email=session['user_email'], user_name=user_name,
+                           job_title=job_title)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -241,10 +244,11 @@ def logout():
 @app.route('/update_profile', methods=['POST'])
 def update_profile():
     if not session.get('logged_in'): return jsonify({"status": "error"}), 401
-    name = request.json.get('name', '')
+    data = request.json or {}
     user = User.query.filter_by(email=session['user_email']).first()
     if user:
-        user.name = name
+        if 'name'      in data: user.name      = data['name']
+        if 'job_title' in data: user.job_title = data['job_title']
         db.session.commit()
     return jsonify({"status": "success"})
 
