@@ -36,4 +36,11 @@ dist/
 build/
 *.egg-info/
 deploy_for_github/
+
+# PyInstaller compiled exe — distribute via Teams, not git
+DenierWorker.exe
+*.spec
+
+# Claude Code internals
+.claude/
 ```
