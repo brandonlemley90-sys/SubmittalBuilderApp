@@ -105,7 +105,7 @@
                             <input type="text" id="outputPath" 
                                    class="flex-1 bg-black/40 border border-white/5 rounded-3xl px-8 py-5 text-sm font-mono focus:ring-2 focus:ring-[#00e090] outline-none transition-all placeholder:text-zinc-600 shadow-inner" 
                                    placeholder="C:\Users\blemley\Downloads\SWACO Submittal">
-                            <button type="button" id="browseBtn" onclick="requestBrowse()" 
+                            <button type="button" id="browseBtn" onclick="requestBrowse()" title="Opens a folder picker on the Worker machine"
                                     class="px-8 bg-zinc-800/50 hover:bg-zinc-700/50 rounded-3xl border border-white/5 hover:border-white/20 transition-all group shrink-0">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-zinc-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
                             </button>
@@ -273,30 +273,68 @@
         }
 
         async function requestBrowse() {
+            // Worker must be online — it opens the Windows folder dialog locally
+            const workerOnline = document.getElementById('workerIndicator').className.includes('00e090');
+            if (!workerOnline) {
+                showToast('Worker is offline. Start the Submittal Worker app, then try again — or type the path directly.', 'warn');
+                return;
+            }
+
             const btn = document.getElementById('browseBtn');
-            const originalColor = btn.className;
-            btn.className = "px-8 bg-[#00e090]/10 border border-[#00e090]/30 rounded-3xl animate-pulse";
-            
+            const IDLE_CLASS = "px-8 bg-zinc-800/50 hover:bg-zinc-700/50 rounded-3xl border border-white/5 hover:border-white/20 transition-all group shrink-0";
+            const BUSY_CLASS = "px-8 bg-[#00e090]/10 border border-[#00e090]/30 rounded-3xl animate-pulse shrink-0";
+            btn.className = BUSY_CLASS;
+            showToast('Opening folder picker on the worker machine…', 'info');
+
             try {
                 const res = await fetch('/api/request_browse_output', {method: 'POST'});
                 if ((await res.json()).status === 'success') {
-                    console.log("Handshake requested...");
-                    pollBrowse(btn, originalColor);
+                    pollBrowse(btn, IDLE_CLASS, BUSY_CLASS, Date.now());
+                } else {
+                    btn.className = IDLE_CLASS;
+                    showToast('Browse request failed. Is the worker running?', 'warn');
                 }
-            } catch (e) { btn.className = originalColor; }
+            } catch (e) {
+                btn.className = IDLE_CLASS;
+                showToast('Could not reach server.', 'warn');
+            }
         }
 
-        async function pollBrowse(btn, originalColor) {
+        async function pollBrowse(btn, idleClass, busyClass, startTime) {
+            if (Date.now() - startTime > 30000) {
+                btn.className = idleClass;
+                showToast('No folder selected after 30 s. Type the path manually if needed.', 'warn');
+                return;
+            }
             try {
                 const res = await fetch('/api/poll_browse_output');
                 const data = await res.json();
                 if (data.status === 'completed') {
                     document.getElementById('outputPath').value = data.path;
-                    btn.className = originalColor;
+                    btn.className = idleClass;
+                    showToast('Output folder set!', 'ok');
                 } else {
-                    setTimeout(() => pollBrowse(btn, originalColor), 1500);
+                    setTimeout(() => pollBrowse(btn, idleClass, busyClass, startTime), 1500);
                 }
-            } catch (e) { btn.className = originalColor; }
+            } catch (e) {
+                btn.className = idleClass;
+            }
+        }
+
+        // --- Minimal toast helper ---
+        function showToast(msg, type) {
+            let toast = document.getElementById('_toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = '_toast';
+                toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;transition:opacity .4s';
+                document.body.appendChild(toast);
+            }
+            const colors = {ok:'#00c87a', warn:'#f59e0b', info:'#60a5fa'};
+            toast.style.opacity = '1';
+            toast.innerHTML = `<div style="background:#18181b;border:1px solid ${colors[type]||'#3f3f46'};color:#f4f4f5;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:10px 20px;border-radius:999px;white-space:nowrap;box-shadow:0 8px 32px rgba(0,0,0,.6)">${msg}</div>`;
+            clearTimeout(toast._t);
+            toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 3500);
         }
 
         document.getElementById('buildForm').addEventListener('submit', async (e) => {
