@@ -2,101 +2,74 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Reset Password | Denier Submittal Builder Agent</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set New Password | Denier Submittal Builder</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Outfit', sans-serif; background: #050507; color: #f4f4f5; }
+        .glass { background: rgba(12, 12, 14, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.15); }
+        .gradient-text { background: linear-gradient(135deg, #00ffa0 0%, #00a86b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .btn-primary { background: linear-gradient(135deg, #00c87a 0%, #008751 100%); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 135, 81, 0.3); filter: brightness(1.1); }
+    </style>
 </head>
-<body class="bg-zinc-900 flex items-center justify-center min-h-screen font-['Montserrat']">
-    <div class="max-w-md w-full bg-zinc-800 p-10 rounded-2xl shadow-2xl border border-zinc-700">
-        <div class="text-center mb-8">
-            <img src="/static/Denier logo.png" alt="Denier Logo" class="h-24 w-auto mx-auto mb-6 drop-shadow-lg">
-            <h1 class="text-white text-xl font-black uppercase tracking-tight">Reset Your Password</h1>
-            <p class="text-zinc-500 text-xs mt-2 uppercase tracking-widest font-bold">Upload your .denierreset file below</p>
+<body class="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-zinc-900 via-black to-black">
+
+    <div class="max-w-md w-full glass p-10 rounded-[2.5rem] shadow-2xl border border-white/5">
+
+        <div class="text-center mb-10">
+            <img src="/static/Denier logo.png" alt="Denier Logo" class="h-20 w-auto mx-auto mb-6 drop-shadow-[0_0_15px_rgba(34,197,94,0.3)]">
+            <h1 class="text-2xl font-black uppercase tracking-tighter gradient-text">Set New Password</h1>
         </div>
 
-        <div class="space-y-6">
-            <div class="bg-zinc-900/60 rounded-xl border border-zinc-700 p-4">
-                <p class="text-xs text-gray-400 leading-relaxed text-center">
-                    If your admin sent you a <span class="text-[#008751] font-bold">.denierreset</span> file, upload it here to update your password.
-                </p>
-            </div>
+        {% if success %}
+        <div class="bg-[#008751]/10 border border-[#008751]/30 rounded-2xl p-6 text-center space-y-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mx-auto text-[#00e090]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <p class="text-[#00e090] font-black text-sm uppercase tracking-widest">Password Updated!</p>
+            <p class="text-zinc-400 text-xs">You can now log in with your new password.</p>
+        </div>
+        <div class="mt-6 text-center">
+            <a href="{{ url_for('login') }}" class="btn-primary inline-block text-white font-black py-3 px-8 rounded-2xl uppercase tracking-[0.2em] text-sm">
+                Go to Login
+            </a>
+        </div>
 
+        {% elif error %}
+        <div class="bg-red-900/20 border border-red-500/30 rounded-2xl p-6 text-center space-y-3 mb-6">
+            <p class="text-red-400 font-black text-xs uppercase tracking-widest">{{ error }}</p>
+        </div>
+        <div class="text-center">
+            <a href="{{ url_for('forgot_password') }}" class="text-[#00e090] font-black text-[10px] uppercase tracking-widest hover:underline">
+                Request a new reset link
+            </a>
+        </div>
+
+        {% else %}
+        {% if error %}
+        <div class="mb-6 bg-red-900/20 border border-red-500/30 text-red-400 text-[10px] font-black px-4 py-3 rounded-xl text-center uppercase tracking-widest">
+            {{ error }}
+        </div>
+        {% endif %}
+        <form action="{{ url_for('reset_password_token', token=token) }}" method="POST" class="space-y-5">
             <div>
-                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Password Reset File</label>
-                <input type="file" id="resetFileInput" accept=".denierreset" 
-                       class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white text-sm focus:ring-2 focus:ring-[#008751] outline-none 
-                              file:mr-4 file:py-1.5 file:px-4 file:rounded file:border-0 file:text-xs file:font-bold file:bg-[#008751] file:text-white 
-                              hover:file:bg-[#006e42] file:cursor-pointer transition-all">
+                <label class="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 ml-1">New Password</label>
+                <input type="password" name="password" placeholder="••••••••" required minlength="6"
+                       class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:ring-2 focus:ring-[#00e090] outline-none transition-all placeholder:text-zinc-700">
             </div>
-
-            <p id="applyResetStatus" class="text-xs font-bold hidden text-center px-2 py-1 rounded-md"></p>
-
-            <button type="button" onclick="applyResetFile()" 
-                    class="w-full bg-[#008751] hover:bg-[#006e42] text-white font-black py-4 rounded-xl uppercase text-xs tracking-[0.2em] shadow-lg border border-[#00a865] transition-all">
-                Apply Password Reset
+            <div>
+                <label class="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 ml-1">Confirm Password</label>
+                <input type="password" name="confirm" placeholder="••••••••" required minlength="6"
+                       class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:ring-2 focus:ring-[#00e090] outline-none transition-all placeholder:text-zinc-700">
+            </div>
+            <button type="submit" class="w-full btn-primary text-white font-black py-5 rounded-2xl uppercase tracking-[0.2em] shadow-2xl mt-2">
+                Set New Password
             </button>
+        </form>
+        {% endif %}
 
-            <div class="text-center mt-6">
-                <a href="/login" class="text-zinc-500 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2">
-                    <span>←</span> Back to Login
-                </a>
-            </div>
-        </div>
     </div>
-
-    <footer class="fixed bottom-4 left-0 right-0 text-center text-zinc-600 text-[10px] uppercase font-bold tracking-widest opacity-50">
-        &copy; 2024 Brandon Lemley
-    </footer>
-
-    <script>
-        async function applyResetFile() {
-            const fileInput = document.getElementById('resetFileInput');
-            const statusEl  = document.getElementById('applyResetStatus');
-
-            if (!fileInput.files.length) {
-                statusEl.textContent = '⚠️ Please select a .denierreset file first.';
-                statusEl.className = 'text-xs font-bold text-yellow-400 block';
-                statusEl.classList.remove('hidden');
-                return;
-            }
-
-            let token;
-            try {
-                const text = await fileInput.files[0].text();
-                token = JSON.parse(text);
-            } catch {
-                statusEl.textContent = '❌ Invalid file format.';
-                statusEl.className = 'text-xs font-bold text-red-500 block';
-                statusEl.classList.remove('hidden');
-                return;
-            }
-
-            statusEl.textContent = 'Validating...';
-            statusEl.className = 'text-xs font-bold text-blue-400 block';
-            statusEl.classList.remove('hidden');
-
-            try {
-                const res = await fetch('/apply_reset', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token })
-                });
-                const data = await res.json();
-
-                if (data.status === 'success') {
-                    statusEl.textContent = '✅ ' + data.message;
-                    statusEl.className = 'text-xs font-bold text-green-400 block';
-                    fileInput.value = '';
-                    setTimeout(() => { window.location.href = '/login'; }, 3000);
-                } else {
-                    statusEl.textContent = '❌ ' + (data.message || 'Reset failed.');
-                    statusEl.className = 'text-xs font-bold text-red-500 block';
-                }
-            } catch (err) {
-                statusEl.textContent = '❌ Server communication error.';
-                statusEl.className = 'text-xs font-bold text-red-500 block';
-            }
-        }
-    </script>
 </body>
 </html>
