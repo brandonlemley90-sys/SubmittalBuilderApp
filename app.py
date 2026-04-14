@@ -141,7 +141,9 @@ class PasswordResetToken(db.Model):
 def init_db():
     with app.app_context():
         db.create_all()
-        # Run any column migrations that create_all won't handle on existing tables
+        # Run column migrations that create_all won't handle on existing tables.
+        # Each runs in its own connection+transaction so a "column already exists"
+        # error on PostgreSQL doesn't poison the session for subsequent statements.
         migrations = [
             "ALTER TABLE users ADD COLUMN job_title VARCHAR(100) DEFAULT ''",
             "ALTER TABLE jobs ADD COLUMN current_step INTEGER DEFAULT 0",
@@ -150,10 +152,11 @@ def init_db():
         ]
         for sql in migrations:
             try:
-                db.session.execute(db.text(sql))
+                with db.engine.connect() as conn:
+                    conn.execute(db.text(sql))
+                    conn.commit()
             except Exception:
-                pass  # Column already exists
-        db.session.commit()
+                pass  # Column already exists — safe to ignore
         for email in SUPER_ADMINS:
             admin = User.query.filter_by(email=email).first()
             if admin:
