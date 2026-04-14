@@ -12,6 +12,7 @@ import hashlib
 import time
 import zipfile
 import smtplib
+import secrets
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -129,6 +130,13 @@ class WorkerPing(db.Model):
     __tablename__ = 'worker_ping'
     id        = db.Column(db.Integer, primary_key=True)
     last_ping = db.Column(db.DateTime)
+
+class PasswordResetToken(db.Model):
+    __tablename__ = 'password_reset_tokens'
+    token      = db.Column(db.String(64), primary_key=True)
+    email      = db.Column(db.String(120), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used       = db.Column(db.Integer, default=0)
 
 def init_db():
     with app.app_context():
@@ -252,6 +260,53 @@ def register():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/forgot_password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'GET':
+        return render_template('forgot_password.html')
+    email = request.form.get('email', '').strip().lower()
+    user  = User.query.filter_by(email=email).first()
+    # Always show success to avoid email enumeration
+    if user:
+        # Invalidate any existing unused tokens for this email
+        PasswordResetToken.query.filter_by(email=email, used=0).delete()
+        token     = secrets.token_urlsafe(32)
+        expires   = datetime.utcnow() + timedelta(hours=1)
+        db.session.add(PasswordResetToken(token=token, email=email, expires_at=expires))
+        db.session.commit()
+        base_url  = os.environ.get('APP_URL', request.host_url.rstrip('/'))
+        reset_url = f"{base_url}/reset_password/{token}"
+        body = (
+            f"Hi {user.name or email},\n\n"
+            f"A password reset was requested for your Denier Submittal Builder account.\n\n"
+            f"Click the link below to set a new password (expires in 1 hour):\n\n"
+            f"{reset_url}\n\n"
+            f"If you did not request this, you can safely ignore this email.\n\n"
+            f"— Denier Electric"
+        )
+        send_email(email, "Denier Submittal Builder — Password Reset", body)
+    return render_template('forgot_password.html', sent=True)
+
+@app.route('/reset_password/<token>', methods=['GET', 'POST'])
+def reset_password_token(token):
+    record = PasswordResetToken.query.filter_by(token=token, used=0).first()
+    if not record or record.expires_at < datetime.utcnow():
+        return render_template('reset.html', error="This reset link has expired or is invalid.")
+    if request.method == 'GET':
+        return render_template('reset.html', token=token)
+    new_pw  = request.form.get('password', '')
+    confirm = request.form.get('confirm', '')
+    if not new_pw or len(new_pw) < 6:
+        return render_template('reset.html', token=token, error="Password must be at least 6 characters.")
+    if new_pw != confirm:
+        return render_template('reset.html', token=token, error="Passwords do not match.")
+    user = User.query.filter_by(email=record.email).first()
+    if user:
+        user.password = generate_password_hash(new_pw)
+        record.used   = 1
+        db.session.commit()
+    return render_template('reset.html', success=True)
 
 # 8. ACCOUNT & VAULT
 @app.route('/update_profile', methods=['POST'])
